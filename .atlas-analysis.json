@@ -1,0 +1,98 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Claude Code Prompt Improver",
+  "projectDescription": "Intelligent prompt optimization hook for Claude Code that enriches vague prompts with research-based clarifying questions before execution",
+  "theme": "aspen",
+  "primaryColor": "#7C3AED",
+  "lightColor": "#A78BFA",
+  "darkColor": "#5B21B6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/how-it-works",
+              "guides/usage-patterns",
+              "guides/bypass-prefixes"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/hook-system",
+              "architecture/skill-system",
+              "architecture/progressive-disclosure"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/troubleshooting",
+              "advanced/faq",
+              "advanced/changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Hook Reference",
+            "pages": [
+              "reference/hook/overview",
+              "reference/hook/evaluation-logic"
+            ]
+          },
+          {
+            "group": "Skill Reference",
+            "pages": [
+              "reference/skill/overview",
+              "reference/skill/research-strategies",
+              "reference/skill/question-patterns",
+              "reference/skill/workflow"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/prompt-transformations",
+              "examples/research-examples",
+              "examples/clear-vs-vague"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Hook-level evaluation with skill-based enrichment",
+    "Research-driven clarification (1-6 targeted questions)",
+    "Progressive disclosure (zero skill overhead for clear prompts)",
+    "31% token reduction vs previous architecture",
+    "Bypass prefixes for user control (* / #)",
+    "Conversation history integration"
+  ],
+  "publicApiSurface": [
+    "UserPromptSubmit hook",
+    "prompt-improver skill",
+    "Bypass prefix: * (skip evaluation)",
+    "Bypass prefix: / (slash commands)",
+    "Bypass prefix: # (memorize)",
+    "AskUserQuestion tool integration",
+    "Plugin installation via marketplace",
+    "Manual skill invocation"
+  ]
+}
