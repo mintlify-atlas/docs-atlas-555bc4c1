@@ -1,0 +1,598 @@
+---
+title: "Research Examples"
+description: "How research plans are created and executed to ground clarifying questions in real project context"
+---
+
+Research is the critical phase that transforms generic questions into project-specific, actionable options. This page shows how research plans are created, executed, and used to formulate targeted questions.
+
+## Research Planning with TodoWrite
+
+Before asking questions, Claude creates a dynamic research plan to systematically gather context.
+
+<Steps>
+  <Step title="Identify Information Gaps">
+    Analyze what's missing from the prompt and what needs to be discovered.
+
+    **Example: "fix the bug"**
+    ```
+    Missing:
+    - Which bug? (no file/line mentioned)
+    - What symptoms? (no error message)
+    - When introduced? (no context)
+
+    Need to discover:
+    - Known bugs (FIXME comments, failing tests)
+    - Recent problems (git log, error logs)
+    - Error locations (try/catch blocks)
+    ```
+  </Step>
+
+  <Step title="Create Research Plan">
+    Use TodoWrite to create a systematic investigation plan.
+
+    **TodoWrite output:**
+    ```
+    [ ] Check conversation history for recent errors
+    [ ] Search for TODO/FIXME comments indicating known bugs
+    [ ] Check for failing tests
+    [ ] Look for recent git commits mentioning "fix" or "bug"
+    [ ] Search for try/catch blocks with console.error
+    ```
+  </Step>
+
+  <Step title="Execute Research">
+    Work through the plan systematically, marking todos as complete.
+
+    ```bash
+    # Step 1: Conversation history
+    ✓ No recent error messages found
+
+    # Step 2: Known bugs
+    Grep: "TODO|FIXME|BUG"
+    ✓ Found: FIXME in auth.ts:89 "Token validation is broken"
+
+    # Step 3: Failing tests
+    Bash: npm test
+    ✓ Found: 2 tests failing in test_auth.test.ts
+
+    # Step 4: Recent fixes
+    Bash: git log --grep="fix|bug" -10
+    ✓ Found: Recent commit "fix login redirect" 2 days ago
+
+    # Step 5: Error logging
+    Grep: "console.error|console.warn"
+    ✓ Found: Error in auth.ts:145 "Invalid token"
+    ```
+  </Step>
+
+  <Step title="Document Findings">
+    Synthesize research into actionable insights.
+
+    **Research Findings:**
+    - FIXME in auth.ts:89: "Token validation is broken"
+    - 2 failing tests related to token validation
+    - Recent fix attempt for login redirect (may have residual issues)
+    - Error logging at auth.ts:145 for invalid tokens
+
+    **Insight:** Token validation is the primary issue (FIXME comment + failing tests)
+  </Step>
+</Steps>
+
+---
+
+## Research Strategies by Prompt Type
+
+Different prompts require different research approaches. Here are common strategies:
+
+<Tabs>
+  <Tab title="Bug Fixes">
+    **Research Goal:** Identify specific bugs and their locations
+
+    **Research Plan Template:**
+    ```
+    1. Check conversation history first
+       - Recent error messages
+       - Files recently viewed
+    
+    2. Search for known issues
+       - Grep: "TODO|FIXME|BUG|XXX"
+       - Check issue tracker mentions in comments
+    
+    3. Check test failures
+       - Run test suite
+       - Look for recently broken tests
+    
+    4. Review recent changes
+       - git log with "fix|bug" grep
+       - git diff for recent modifications
+    
+    5. Find error locations
+       - Grep: "console.error|throw|Error("
+       - Look for try/catch blocks
+    ```
+
+    **Example Execution:**
+    ```bash
+    # Conversation history
+    [System: User recently opened auth.ts]
+    Context: User is working in authentication code
+
+    # Known issues
+    $ Grep: "FIXME"
+    auth.ts:89: // FIXME: Token validation is broken
+    auth.ts:145: // TODO: Better error handling
+
+    # Test failures
+    $ npm test
+    FAIL test_auth.test.ts
+      ✗ should validate valid token
+      ✗ should reject invalid token
+
+    # Recent commits
+    $ git log --grep="fix" --oneline -5
+    abc123 fix login redirect
+    def456 fix session timeout
+
+    # Error locations
+    $ Grep: "throw new Error"
+    auth.ts:145: throw new Error('Invalid token');
+    auth.ts:212: throw new Error('Expired session');
+    ```
+
+    **Result:** Questions grounded in actual bugs found (auth.ts:89, test failures)
+  </Tab>
+
+  <Tab title="Refactoring">
+    **Research Goal:** Understand current code quality and established patterns
+
+    **Research Plan Template:**
+    ```
+    1. Analyze target file
+       - Read file to understand structure
+       - Count lines, functions, complexity
+    
+    2. Identify quality issues
+       - Long functions (>50 lines)
+       - Code duplication
+       - Mixed concerns
+    
+    3. Check for patterns
+       - Read similar files
+       - Look for service/repository layers
+       - Check architectural conventions
+    
+    4. Research best practices
+       - WebSearch for framework patterns
+       - Check project documentation
+    ```
+
+    **Example Execution:**
+    ```bash
+    # Analyze target
+    $ Read: src/api/users.ts
+    Result: 450 lines, 5 major functions
+    - getUserById: 45 lines
+    - createUser: 78 lines
+    - updateUser: 89 lines (longest)
+    - deleteUser: 34 lines
+    - validateUser: 56 lines
+
+    # Quality issues
+    Issues found:
+    - All logic in single file (controller + service + validation)
+    - updateUser at 89 lines is too complex
+    - Validation logic duplicated across functions
+
+    # Pattern check
+    $ Read: src/api/products.ts
+    Pattern: Uses ProductService class for business logic
+    - Controller: thin route handlers
+    - Service: ProductService class
+    - Validation: separate validator module
+
+    # Best practices
+    $ WebSearch: "Express API architecture patterns"
+    Industry standard: Controller → Service → Repository
+    ```
+
+    **Result:** Questions about extracting service layer to match ProductService pattern
+  </Tab>
+
+  <Tab title="New Features">
+    **Research Goal:** Understand project architecture and feature requirements
+
+    **Research Plan Template:**
+    ```
+    1. Check existing implementation
+       - Grep for related code
+       - See if feature partially exists
+    
+    2. Analyze project stack
+       - Read package.json
+       - Review framework/libraries
+    
+    3. Explore architecture
+       - Task/Explore project structure
+       - Identify where feature fits
+    
+    4. Research approaches
+       - WebSearch for best practices
+       - Compare library options
+    
+    5. Check requirements
+       - Read README.md, docs/
+       - Look for constraints or preferences
+    ```
+
+    **Example Execution:**
+    ```bash
+    # Existing implementation
+    $ Grep: "auth|login|jwt"
+    Result: No authentication code found
+
+    # Project stack
+    $ Read: package.json
+    {
+      "dependencies": {
+        "express": "4.18.2",
+        "mongodb": "5.1.0"
+      }
+    }
+
+    # Architecture
+    $ Task: Explore project structure
+    Result: 
+    - Express REST API
+    - MongoDB database
+    - Microservices architecture (planned)
+    - /src/routes, /src/services, /src/models
+
+    # Research approaches
+    $ WebSearch: "Express authentication JWT vs session microservices"
+    Findings:
+    - JWT: Stateless, better for microservices
+    - Session: Stateful, simpler but less scalable
+    - OAuth: Third-party, adds external dependency
+
+    # Requirements
+    $ Read: README.md
+    Found: "Must support mobile app"
+    Implication: Stateless auth (JWT) preferred over sessions
+    ```
+
+    **Result:** Questions about JWT vs session, token storage, scope (informed by microservices + mobile requirement)
+  </Tab>
+
+  <Tab title="Performance">
+    **Research Goal:** Identify bottlenecks and optimization opportunities
+
+    **Research Plan Template:**
+    ```
+    1. Check existing performance tools
+       - Look for monitoring/profiling code
+       - Check for existing caching
+    
+    2. Identify slow operations
+       - Look for database queries
+       - Find external API calls
+       - Check for expensive computations
+    
+    3. Measure current performance
+       - Run benchmarks if available
+       - Check server logs for response times
+    
+    4. Research optimization strategies
+       - WebSearch for framework-specific optimizations
+       - Check for available caching solutions
+    
+    5. Analyze infrastructure
+       - Check available resources (Redis, CDN)
+       - Review deployment architecture
+    ```
+
+    **Example Execution:**
+    ```bash
+    # Existing tools
+    $ Grep: "cache|redis|memcache"
+    Result: Redis installed but not configured
+
+    # Slow operations
+    $ Grep: "db\\.|await.*find|fetch"
+    Found frequent queries:
+    - GET /api/products: db.products.find()
+    - GET /api/users/:id: db.users.findOne()
+
+    # Performance measurement
+    $ Read: logs/access.log
+    Response times:
+    - /api/products: 500ms average
+    - /api/users/:id: 200ms average
+    - /api/orders: 150ms average
+
+    # Optimization research
+    $ WebSearch: "Express Redis caching best practices"
+    Strategies:
+    - Cache-aside pattern
+    - TTL-based expiration
+    - Cache invalidation on writes
+
+    # Infrastructure
+    $ Read: docker-compose.yml
+    Available:
+    - Redis container (not connected)
+    - MongoDB (primary database)
+    ```
+
+    **Result:** Questions about caching target endpoints (/api/products is slowest), strategy (Redis available), and TTL duration
+  </Tab>
+</Tabs>
+
+---
+
+## Research Progression Example
+
+This example shows the full research journey for a complex prompt.
+
+<CardGroup cols={2}>
+  <Card title="Prompt" icon="message">
+    ```bash
+    $ claude "implement caching"
+    ```
+  </Card>
+  <Card title="Initial Assessment" icon="magnifying-glass">
+    - Target: ❌ (cache what?)
+    - Action: ❌ (how?)
+    - Criteria: ❌ (performance goal?)
+    - **Decision: RESEARCH REQUIRED**
+  </Card>
+</CardGroup>
+
+### Phase 1: Check Current State
+
+```bash
+# TodoWrite
+[ ] Check for existing caching
+[ ] Identify slow endpoints
+[ ] Check available infrastructure
+```
+
+**Research:**
+```bash
+$ Grep: "cache|redis|memcache"
+Result: Redis installed in package.json but not used
+
+$ Read: docker-compose.yml
+Result: Redis container defined but not connected
+
+✓ Finding: Redis available but not configured
+```
+
+### Phase 2: Identify Bottlenecks
+
+```bash
+# TodoWrite
+[ ] Measure endpoint performance
+[ ] Find database query patterns
+[ ] Check for expensive operations
+```
+
+**Research:**
+```bash
+$ Read: logs/access.log (last 1000 requests)
+Average response times:
+- /api/products: 500ms (high traffic)
+- /api/users/:id: 200ms (moderate traffic)
+- /api/orders: 150ms (low traffic)
+
+$ Grep: "db.products.find"
+Result: /api/products does full collection scan
+
+✓ Finding: Products endpoint is slowest and most frequently called
+```
+
+### Phase 3: Analyze Data Characteristics
+
+```bash
+# TodoWrite
+[ ] Check how often data changes
+[ ] Review update patterns
+[ ] Identify cache candidates
+```
+
+**Research:**
+```bash
+$ Bash: git log --grep="product" --since="1 month ago" | wc -l
+Result: 3 product updates in last month
+
+$ Read: src/models/Product.ts
+Result: Products have catalog_updated_at timestamp
+
+$ Grep: "users.update|user.save"
+Result: User profiles updated frequently (profile edits, activity)
+
+✓ Finding: Products rarely change (good cache candidate)
+✓ Finding: User data changes frequently (poor cache candidate)
+```
+
+### Phase 4: Research Best Practices
+
+```bash
+# TodoWrite
+[ ] Research caching strategies
+[ ] Compare Redis vs in-memory
+[ ] Find TTL recommendations
+```
+
+**Research:**
+```bash
+$ WebSearch: "Express Redis caching patterns"
+Findings:
+- Cache-aside pattern: check cache, fallback to DB
+- TTL approach: simple but can serve stale data
+- Cache invalidation: complex but accurate
+
+$ WebSearch: "Redis TTL recommendations for product catalog"
+Common TTLs:
+- Static content: 5-15 minutes
+- Semi-static: 1-5 minutes
+- Dynamic: 30-60 seconds
+
+✓ Finding: TTL strategy with 1-5 minutes is industry standard
+```
+
+### Phase 5: Formulate Questions
+
+**Research Findings Summary:**
+- Redis available but not configured
+- /api/products is slowest (500ms) with high traffic
+- Products rarely change (3 updates/month)
+- User data changes frequently
+- Industry standard: 1-5 minute TTL for catalogs
+
+**Questions Generated:**
+```json
+{
+  "questions": [
+    {
+      "question": "What should be cached?",
+      "options": [
+        {
+          "label": "Product catalog (/api/products)",
+          "description": "Currently 500ms response time. Products change infrequently (3 updates/month). High traffic endpoint."
+        },
+        {
+          "label": "User profiles (/api/users/:id)",
+          "description": "Currently 200ms response time. Profile data changes frequently. Moderate traffic."
+        },
+        {
+          "label": "Database queries",
+          "description": "Cache at ORM level for all queries. Broadest impact but requires careful invalidation."
+        }
+      ]
+    },
+    {
+      "question": "Which caching strategy should be used?",
+      "options": [
+        {
+          "label": "Redis with TTL",
+          "description": "External cache with time-to-live expiration. Redis already installed. Best for distributed systems. Standard approach."
+        },
+        {
+          "label": "In-memory with node-cache",
+          "description": "Simple in-process caching. Fast but not shared across instances. Good for single-server deployments."
+        },
+        {
+          "label": "Redis with cache invalidation",
+          "description": "Active invalidation on data changes. Most complex but most accurate. Requires event hooks on updates."
+        }
+      ]
+    },
+    {
+      "question": "What should the cache TTL be?",
+      "options": [
+        {
+          "label": "5 minutes",
+          "description": "Aggressive caching. Data can be stale up to 5 minutes. Best for very static data."
+        },
+        {
+          "label": "1 minute",
+          "description": "Balanced approach. Reduces load while keeping data relatively fresh. Good default."
+        },
+        {
+          "label": "30 seconds",
+          "description": "Conservative caching. Minimal staleness but less performance benefit. Use for semi-dynamic data."
+        }
+      ]
+    }
+  ]
+}
+```
+
+<Note>
+Every option is grounded in research:
+- Product catalog: 500ms response time (measured), 3 updates/month (git log)
+- Redis available: found in package.json and docker-compose.yml
+- TTL values: based on industry research and data change frequency
+</Note>
+
+---
+
+## Key Research Principles
+
+<AccordionGroup>
+  <Accordion title="Always Check Conversation History First">
+    Before exploring the codebase, check if recent conversation already provides context.
+
+    **Example:**
+    ```
+    User: [viewing auth.ts]
+    User: "refactor this"
+    
+    Research: Conversation shows user viewing auth.ts
+    Result: Skip file search, proceed with auth.ts context
+    ```
+
+    **Saves:** Redundant exploration when context already exists
+  </Accordion>
+
+  <Accordion title="Ground Questions in Findings, Not Assumptions">
+    Questions must reference actual research discoveries, not generic knowledge.
+
+    **Bad (generic):**
+    ```
+    "Which authentication method?"
+    - JWT (stateless)
+    - Sessions (stateful)
+    ```
+
+    **Good (grounded):**
+    ```
+    "Which authentication method?"
+    - JWT (stateless, recommended for microservices architecture found in docs/architecture.md)
+    - Sessions (found connect-mongo in package.json, simpler but less scalable)
+    ```
+  </Accordion>
+
+  <Accordion title="Create Dynamic Plans Based on Prompt Type">
+    Research plans should adapt to what needs clarification, not follow rigid templates.
+
+    **Bug fix prompt:** Focus on finding bugs (grep FIXME, run tests, check logs)
+    
+    **Refactoring prompt:** Focus on code quality (analyze complexity, find patterns)
+    
+    **Feature prompt:** Focus on architecture (check stack, research approaches, read requirements)
+  </Accordion>
+
+  <Accordion title="Document Findings to Inform Questions">
+    Keep track of what research reveals to build comprehensive question context.
+
+    **Research Findings Template:**
+    ```
+    - Current state: [what exists now]
+    - Issues found: [problems discovered]
+    - Patterns: [established conventions]
+    - Best practices: [industry standards]
+    - Constraints: [project requirements]
+    ```
+
+    These findings become option descriptions in questions.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Research Checklist
+
+Before formulating questions, verify:
+
+- ✅ Created research plan using TodoWrite
+- ✅ Checked conversation history first
+- ✅ Explored codebase systematically
+- ✅ Gathered external context (docs, best practices)
+- ✅ Documented findings clearly
+- ✅ Each question option references specific research discoveries
+- ✅ No generic assumptions or base knowledge as options
+
+<Warning>
+Skipping research leads to generic questions that don't help the user. Every option must be grounded in actual project context.
+</Warning>

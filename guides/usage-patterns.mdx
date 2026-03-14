@@ -1,0 +1,287 @@
+---
+title: "Usage Patterns"
+description: "Common usage scenarios and best practices"
+---
+
+The Claude Code Prompt Improver adapts to your workflow with multiple usage patterns, from automatic evaluation to manual bypasses.
+
+## Normal Usage
+
+Simply use Claude Code as you normally would. The hook automatically evaluates every prompt:
+
+<Tabs>
+  <Tab title="Clear Prompts">
+    Clear, specific prompts proceed immediately without questions:
+
+    ```bash
+    claude "Fix TypeError in src/components/Map.tsx line 127 where mapboxgl.Map constructor is missing container option"
+    ```
+
+    **What happens:**
+    - Hook evaluates: prompt is clear and specific
+    - Claude proceeds immediately with the fix
+    - No skill invocation, minimal overhead (~189 tokens)
+
+    <Tip>
+    Include file paths, line numbers, error messages, or specific component names to make prompts clear.
+    </Tip>
+  </Tab>
+
+  <Tab title="Vague Prompts">
+    Vague or ambiguous prompts trigger clarification questions:
+
+    ```bash
+    claude "fix the error"
+    ```
+
+    **What happens:**
+    - Hook evaluates: prompt is vague
+    - Claude invokes prompt-improver skill
+    - Claude researches codebase and context
+    - Claude asks targeted questions:
+
+    ```
+    Which error needs fixing?
+      ○ TypeError in src/components/Map.tsx (recent change)
+      ○ API timeout in src/services/osmService.ts
+      ○ Other (paste error message)
+    ```
+
+    - You select an option
+    - Claude proceeds with full context
+
+    <Note>
+    The skill asks 1-6 questions maximum, grounded in actual research findings from your codebase.
+    </Note>
+  </Tab>
+
+  <Tab title="Moderate Clarity">
+    Prompts with some context may still trigger questions if critical details are missing:
+
+    ```bash
+    claude "add tests"
+    ```
+
+    **What happens:**
+    - Hook evaluates: needs clarification
+    - Claude researches existing test patterns
+    - Claude asks 2-3 focused questions:
+
+    ```
+    Which component needs tests?
+      ○ src/components/Map.tsx (no coverage)
+      ○ src/services/osmService.ts (partial coverage)
+      ○ Other
+
+    What type of tests?
+      ○ Unit tests (Jest)
+      ○ Integration tests (existing pattern)
+      ○ Both
+    ```
+
+    <Tip>
+    Claude checks conversation history first - if you just discussed a component, it may not ask which component to test.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Bypass Prefixes
+
+Use special prefix characters to skip evaluation when needed:
+
+<Tabs>
+  <Tab title="* Prefix: Skip Evaluation">
+    Use `*` to completely bypass the hook evaluation:
+
+    ```bash
+    claude "* add dark mode"
+    ```
+
+    **What happens:**
+    - Hook detects `*` prefix
+    - Removes the `*` from prompt
+    - Passes clean prompt directly to Claude
+    - No evaluation, no skill invocation
+
+    **When to use:**
+    - You want to iterate quickly without interruption
+    - You know the prompt is vague but have context in mind
+    - You're experimenting and don't want clarification
+
+    <Warning>
+    Use sparingly - you lose the benefits of clarification and may need multiple back-and-forth messages.
+    </Warning>
+  </Tab>
+
+  <Tab title="/ Prefix: Slash Commands">
+    Slash commands automatically bypass evaluation:
+
+    ```bash
+    claude "/help"
+    claude "/clear"
+    claude "/plugin"
+    ```
+
+    **What happens:**
+    - Hook detects `/` prefix
+    - Recognizes as built-in or custom slash command
+    - Passes through unchanged
+    - No evaluation needed
+
+    **Why this matters:**
+    - Built-in commands must work without modification
+    - Custom slash commands function normally
+    - No overhead for command-based workflows
+
+    <Info>
+    This bypass is automatic - you don't need to do anything special. All slash commands work as expected.
+    </Info>
+  </Tab>
+
+  <Tab title="# Prefix: Memorize">
+    The memorize feature automatically bypasses evaluation:
+
+    ```bash
+    claude "# remember to use rg over grep"
+    claude "# prefer async/await over .then() chains"
+    ```
+
+    **What happens:**
+    - Hook detects `#` prefix
+    - Recognizes as memorize command
+    - Passes through unchanged
+    - No evaluation needed
+
+    **Why this matters:**
+    - Memorize commands are meta-instructions, not tasks
+    - No need to evaluate clarity of preferences
+    - Keeps memorize workflow clean and fast
+
+    <Tip>
+    Use memorize to teach Claude your project conventions. These bypass evaluation since they're preferences, not executable tasks.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Manual Skill Invocation
+
+You can manually invoke the skill without waiting for the hook:
+
+```bash
+claude "Use the prompt-improver skill to research and clarify: add authentication"
+```
+
+**What happens:**
+- Claude directly invokes the prompt-improver skill
+- Skill loads research and questioning workflow
+- Claude creates research plan, explores codebase
+- Claude asks targeted questions based on findings
+- You answer, Claude executes with full context
+
+**When to use:**
+- Testing the skill behavior
+- You know a prompt needs enrichment
+- Hook evaluation isn't working as expected
+- Building or debugging prompt evaluation systems
+
+<Info>
+Manual invocation skips the hook's evaluation step and goes straight to the skill's research phase.
+</Info>
+
+## Real-World Examples
+
+### Example 1: Bug Fix
+
+<Tabs>
+  <Tab title="Vague Prompt">
+    ```bash
+    $ claude "fix the bug"
+    ```
+
+    Claude asks:
+    ```
+    Hey! The Prompt Improver Hook flagged your prompt as a bit vague 
+    because it doesn't specify which bug or where to look.
+
+    Which bug are you referring to?
+      ○ TypeError in auth.py:145 (login failures)
+      ○ Session timeout in session.py:89
+      ○ Memory leak in background worker
+      ○ Other
+    ```
+
+    You select "TypeError in auth.py:145" → Claude fixes it with full context
+  </Tab>
+
+  <Tab title="Clear Prompt">
+    ```bash
+    $ claude "Fix the TypeError in auth.py:145 where we're not handling 
+    null responses from the OAuth provider"
+    ```
+
+    Claude proceeds immediately:
+    ```
+    I'll fix the error handling in auth.py:145...
+    ```
+
+    No questions asked - prompt was specific and actionable.
+  </Tab>
+</Tabs>
+
+### Example 2: Adding Features
+
+<Tabs>
+  <Tab title="Needs Context">
+    ```bash
+    $ claude "add authentication"
+    ```
+
+    Claude researches and asks:
+    ```
+    What authentication method?
+      ○ OAuth 2.0 (existing provider config found)
+      ○ JWT tokens (common pattern in codebase)
+      ○ Session-based (matches current approach)
+      ○ Other
+
+    Where should auth be enforced?
+      ○ API routes only (/api/*)
+      ○ Entire app (middleware)
+      ○ Specific routes (I'll specify)
+    ```
+  </Tab>
+
+  <Tab title="Bypass for Speed">
+    ```bash
+    $ claude "* add authentication"
+    ```
+
+    Claude proceeds without questions (you used `*` bypass):
+    ```
+    I'll add authentication to the app...
+    ```
+
+    May require follow-up questions if Claude makes assumptions.
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Be Specific When Possible" icon="crosshairs">
+    Include file paths, error messages, line numbers, and component names to get immediate results.
+  </Card>
+  <Card title="Trust the Evaluation" icon="check">
+    If Claude asks questions, the prompt likely needed clarification. Answering saves time overall.
+  </Card>
+  <Card title="Use Bypass Sparingly" icon="forward">
+    The `*` prefix skips helpful clarification. Use only when you have clear context in mind.
+  </Card>
+  <Card title="Leverage History" icon="clock">
+    Claude checks conversation history. If you just discussed a component, you may not need to specify it again.
+  </Card>
+</CardGroup>
+
+<Tip>
+**Quick iteration tip:** For rapid experimentation where you're willing to do back-and-forth, use `*` to bypass. For production work where you want it right the first time, let the hook evaluate.
+</Tip>

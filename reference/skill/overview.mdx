@@ -1,0 +1,198 @@
+---
+title: "Skill Overview"
+description: "Understanding the prompt-improver skill: purpose, structure, and invocation"
+---
+
+The `prompt-improver` skill transforms vague, ambiguous prompts into actionable, well-defined requests through systematic research and targeted clarification.
+
+## Purpose
+
+This skill enriches prompts that lack specifics, context, or clear targets before execution. It follows a structured 4-phase approach to ensure every question asked is grounded in actual research findings rather than assumptions.
+
+## When This Skill is Invoked
+
+### Automatic Invocation
+
+The most common path is automatic invocation through the UserPromptSubmit hook:
+
+1. **Hook evaluates prompt** - Checks for clarity using conversation history
+2. **Hook determines vagueness** - Identifies missing specifics, context, or clear target
+3. **Hook invokes skill** - Instructs Claude to load and follow the skill workflow
+
+<Tip>
+The skill assumes the prompt has already been identified as vague by the hook. It proceeds directly to research and clarification rather than re-evaluating clarity.
+</Tip>
+
+### Manual Invocation
+
+You can manually invoke the skill:
+
+- To enrich a vague prompt with research-based questions
+- When building or testing prompt evaluation systems
+- When a prompt lacks sufficient context even with conversation history
+
+## Skill Structure
+
+### YAML Frontmatter
+
+```yaml
+name: prompt-improver
+description: This skill enriches vague prompts with targeted research and clarification before execution. Should be used when a prompt is determined to be vague and requires systematic research, question generation, and execution guidance.
+```
+
+**Key fields:**
+- `name`: `prompt-improver` (lowercase, hyphenated)
+- `description`: Under 1024 characters, includes activation triggers
+
+### Main Documentation (SKILL.md)
+
+The core skill file contains:
+
+- **Purpose and invocation triggers** - When to use the skill
+- **4-phase workflow** - Research → Questions → Clarify → Execute
+- **Research plan template** - Systematic context gathering
+- **Question guidelines** - Grounded, specific, multiple choice
+- **Key principles** - Research first, ground questions, stay focused
+- **Progressive disclosure links** - References to detailed guides
+
+### Reference Files
+
+The skill uses progressive disclosure with specialized reference files:
+
+**references/research-strategies.md**
+- Research planning framework
+- Codebase exploration strategies (Task/Explore, Glob, Grep)
+- Documentation research patterns
+- Web research for best practices
+- Tool selection guide
+
+**references/question-patterns.md**
+- AskUserQuestion tool format and structure
+- Question templates by category (target, approach, scope)
+- Option generation best practices
+- Common pitfalls and how to avoid them
+
+**references/examples.md**
+- Real-world prompt transformations
+- Vague prompts with research flow
+- Clear prompts that proceed immediately
+- Complex multi-question scenarios
+
+<Note>
+Reference files are loaded only when detailed guidance is needed, minimizing context overhead for common cases.
+</Note>
+
+## Core Workflow
+
+The skill follows a systematic 4-phase approach:
+
+<Steps>
+  <Step title="Phase 1: Research">
+    Create a dynamic research plan using TodoWrite, then gather context from conversation history, codebase, documentation, and web resources.
+  </Step>
+  
+  <Step title="Phase 2: Generate Questions">
+    Based on research findings, formulate 1-6 targeted questions with specific options grounded in actual discoveries.
+  </Step>
+  
+  <Step title="Phase 3: Get Clarification">
+    Use AskUserQuestion tool to present research-grounded questions with 2-4 concrete options per question.
+  </Step>
+  
+  <Step title="Phase 4: Execute">
+    Proceed with the original request using clarification answers, research findings, and conversation history.
+  </Step>
+</Steps>
+
+For detailed workflow guidance, see [Workflow](/reference/skill/workflow).
+
+## Key Principles
+
+<CardGroup cols={2}>
+  <Card title="Research First" icon="magnifying-glass">
+    Always gather context before formulating questions. Never skip the research phase.
+  </Card>
+  
+  <Card title="Ground Questions" icon="anchor">
+    Use research findings, not assumptions or base knowledge. Every option must be traceable to research.
+  </Card>
+  
+  <Card title="Be Specific" icon="bullseye">
+    Provide concrete options from actual codebase/context. Avoid generic choices like "best practice approach".
+  </Card>
+  
+  <Card title="Stay Focused" icon="filter">
+    Ask 1-6 questions maximum, each addressing one decision point. Keep questions independent.
+  </Card>
+</CardGroup>
+
+## Progressive Disclosure
+
+The skill is designed with progressive disclosure to minimize context overhead:
+
+- **SKILL.md** contains core workflow and essentials
+- **Reference files** provide deep guidance when needed
+- Clear prompts proceed immediately without loading skill
+- Vague prompts load skill, then references only if needed
+
+<Tip>
+This architecture ensures zero context penalty for clear prompts while providing comprehensive guidance for complex scenarios.
+</Tip>
+
+## Example: Skill in Action
+
+**Original prompt:** `fix the bug`
+
+**Hook evaluation:** Determined vague (no target, no context)
+
+**Skill invoked:** Yes
+
+**Research plan (TodoWrite):**
+1. Check conversation history for recent errors
+2. Explore codebase for failing tests
+3. Grep for TODO/FIXME comments
+4. Check git log for recent problem areas
+
+**Research findings:**
+- Recent conversation mentions login failures
+- auth.py:145 has try/catch swallowing errors
+- Tests failing in test_auth.py
+
+**Question generated:**
+```json
+{
+  "question": "Which bug are you referring to?",
+  "header": "Bug target",
+  "multiSelect": false,
+  "options": [
+    {
+      "label": "Login authentication failure (auth.py:145)",
+      "description": "Try/catch block swallowing errors. Tests failing in test_auth.py."
+    },
+    {
+      "label": "Session timeout issues (session.py:89)",
+      "description": "Session expiration handling with edge case bugs."
+    }
+  ]
+}
+```
+
+**User answer:** Login authentication failure
+
+**Execution:** Fix error handling in auth.py:145 that's causing login failures
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Research Strategies" href="/reference/skill/research-strategies" icon="flask">
+    Systematic approaches for gathering context before asking questions
+  </Card>
+  
+  <Card title="Question Patterns" href="/reference/skill/question-patterns" icon="circle-question">
+    Templates and best practices for formulating effective questions
+  </Card>
+  
+  <Card title="Workflow" href="/reference/skill/workflow" icon="diagram-project">
+    Detailed 4-phase approach from research to execution
+  </Card>
+</CardGroup>

@@ -1,0 +1,530 @@
+---
+title: "Prompt Transformations"
+description: "Real-world examples showing how vague prompts are transformed through research, questions, and execution"
+---
+
+This page shows complete transformations from vague prompts through the entire research → question → execution flow, demonstrating how the prompt improver enriches requests with context.
+
+## Complete Transformation Examples
+
+### Generic Bug Fix
+
+This example shows the full journey from a completely vague prompt to precise execution.
+
+<Tabs>
+  <Tab title="Original Prompt">
+    ```bash
+    $ claude "fix the bug"
+    ```
+
+    **Evaluation:**
+    - Target: ❌ (no file, function, or bug specified)
+    - Action: ❌ (what needs fixing?)
+    - Criteria: ~ (bug fixed, but which bug?)
+    - Context: Check conversation history
+
+    **Conversation History Check:**
+    No recent error messages, no file viewing context.
+
+    **Decision:** RESEARCH REQUIRED
+  </Tab>
+
+  <Tab title="Research Phase">
+    Claude creates a research plan using TodoWrite:
+
+    ```
+    Research Plan:
+    1. Search for TODO/FIXME comments indicating known bugs
+    2. Check for failing tests
+    3. Look for recent git commits mentioning "fix" or "bug"
+    4. Search for try/catch blocks with console.error
+    ```
+
+    **Research Execution:**
+    ```bash
+    # Step 1: Search for known issues
+    Grep: "TODO|FIXME|BUG"
+    Results: 3 TODOs, 1 FIXME in auth.ts:89
+
+    # Step 2: Check test failures
+    Glob: "**/*.test.ts"
+    Bash: npm test
+    Results: 2 tests failing in test_auth.test.ts
+
+    # Step 3: Review recent fixes
+    Bash: git log --grep="fix|bug" --oneline -10
+    Results: Recent commit "fix login redirect" 2 days ago
+
+    # Step 4: Find error logging
+    Grep: "console.error|console.warn"
+    Results: Error logged in auth.ts:145 "Invalid token"
+    ```
+
+    **Research Findings:**
+    - FIXME in auth.ts:89: "FIXME: Token validation is broken"
+    - 2 failing tests related to token validation
+    - Recent fix attempt for login redirect
+    - Error logging at auth.ts:145 for invalid tokens
+  </Tab>
+
+  <Tab title="Questions Asked">
+    Based on research findings, Claude asks:
+
+    ```json
+    {
+      "questions": [
+        {
+          "question": "Which bug should be fixed?",
+          "header": "Bug target",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Token validation (auth.ts:89)",
+              "description": "FIXME comment indicates broken token validation. 2 failing tests in test_auth.test.ts related to this. Likely high priority."
+            },
+            {
+              "label": "Login redirect (recent commit)",
+              "description": "Recent commit 2 days ago attempted to fix login redirect. May have residual issues."
+            },
+            {
+              "label": "Invalid token logging (auth.ts:145)",
+              "description": "Errors being logged for invalid tokens. May be symptom of validation bug or separate issue."
+            }
+          ]
+        }
+      ]
+    }
+    ```
+
+    **User Answer:** "Token validation (auth.ts:89)"
+  </Tab>
+
+  <Tab title="Execution">
+    With clarification, Claude proceeds with full context:
+
+    ```typescript
+    // Fix token validation in auth.ts:89
+    // Addresses FIXME comment and resolves 2 failing tests
+
+    // Before (auth.ts:89)
+    function validateToken(token: string) {
+      // FIXME: Token validation is broken
+      return jwt.verify(token, process.env.SECRET);
+    }
+
+    // After (auth.ts:89)
+    function validateToken(token: string) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!decoded || typeof decoded !== 'object') {
+          throw new Error('Invalid token structure');
+        }
+        return decoded;
+      } catch (error) {
+        console.error('Token validation failed:', error.message);
+        throw new Error('Invalid token');
+      }
+    }
+    ```
+
+    **Verification:**
+    ```bash
+    npm test test_auth.test.ts
+    # ✅ All tests passing
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Refactoring Request
+
+Transforming a vague improvement request into specific architectural work.
+
+<Tabs>
+  <Tab title="Original Prompt">
+    ```bash
+    $ claude "refactor the code to be better"
+    ```
+
+    **Evaluation:**
+    - Target: ❌ (what code?)
+    - Action: ❌ ("better" is subjective)
+    - Criteria: ❌ (what defines "better"?)
+    - Context: Check recent activity
+
+    **Context Check:**
+    User recently opened `src/api/users.ts`
+
+    **Decision:** RESEARCH REQUIRED
+  </Tab>
+
+  <Tab title="Research Phase">
+    ```
+    Research Plan:
+    1. Read src/api/users.ts to understand current state
+    2. Search for code quality issues (long functions, duplication)
+    3. Check for established patterns in similar files
+    4. Research Node.js/TypeScript refactoring best practices
+    ```
+
+    **Research Findings:**
+    ```bash
+    # File analysis
+    Read: src/api/users.ts
+    Result: 450 lines, single file with all user operations
+
+    # Function complexity
+    - getUserById: 45 lines
+    - createUser: 78 lines
+    - updateUser: 89 lines
+    - deleteUser: 34 lines
+    - validateUser: 56 lines
+
+    # Pattern check
+    Read: src/api/products.ts
+    Finding: Products API uses service layer pattern (ProductService class)
+    ```
+
+    **Key Insights:**
+    - users.ts is 450 lines, all logic in one file
+    - Other APIs (products) use service layer separation
+    - Industry pattern: Controller → Service → Repository
+    - Current code mixes validation, business logic, data access
+  </Tab>
+
+  <Tab title="Questions Asked">
+    ```json
+    {
+      "questions": [
+        {
+          "question": "What aspect of the code should be improved?",
+          "header": "Improvement",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Extract service layer",
+              "description": "Create UserService class for business logic, matching ProductService pattern already used in products.ts. Separates concerns and improves testability."
+            },
+            {
+              "label": "Split into multiple files",
+              "description": "Break 450-line file into smaller modules (validation.ts, service.ts, controller.ts). Easier to navigate and maintain."
+            },
+            {
+              "label": "Reduce function complexity",
+              "description": "Refactor long functions (updateUser at 89 lines, createUser at 78 lines) into smaller, focused functions. Improves readability."
+            }
+          ]
+        },
+        {
+          "question": "Should this follow the existing ProductService pattern?",
+          "header": "Pattern",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes, match ProductService",
+              "description": "Maintain consistency with existing codebase. Same architecture makes it easier for team to navigate."
+            },
+            {
+              "label": "No, use different approach",
+              "description": "Opportunity to establish new pattern if ProductService approach has issues."
+            }
+          ]
+        }
+      ]
+    }
+    ```
+
+    **User Answers:**
+    1. "Extract service layer"
+    2. "Yes, match ProductService"
+  </Tab>
+
+  <Tab title="Execution">
+    Claude creates a service layer following the established pattern:
+
+    ```typescript
+    // src/services/UserService.ts (new file)
+    export class UserService {
+      constructor(private userRepository: UserRepository) {}
+
+      async getUserById(id: string) {
+        const user = await this.userRepository.findById(id);
+        if (!user) throw new Error('User not found');
+        return this.formatUserResponse(user);
+      }
+
+      async createUser(data: CreateUserDto) {
+        await this.validateUserData(data);
+        const user = await this.userRepository.create(data);
+        return this.formatUserResponse(user);
+      }
+
+      // ... other methods
+    }
+    ```
+
+    ```typescript
+    // src/api/users.ts (refactored controller)
+    import { UserService } from '../services/UserService';
+
+    const userService = new UserService(userRepository);
+
+    router.get('/:id', async (req, res) => {
+      const user = await userService.getUserById(req.params.id);
+      res.json(user);
+    });
+
+    // ... slim controller methods
+    ```
+
+    **Result:** Reduced users.ts from 450 to ~80 lines, matches ProductService architecture.
+  </Tab>
+</Tabs>
+
+---
+
+### Feature Implementation
+
+Transforming a feature request from ambiguous to fully-specified.
+
+<Tabs>
+  <Tab title="Original Prompt">
+    ```bash
+    $ claude "add authentication"
+    ```
+
+    **Evaluation:**
+    - Target: ~ (app-wide feature)
+    - Action: ✅ (add authentication)
+    - Criteria: ❌ (what type? what approach?)
+    - Context: Check project state
+
+    **Decision:** RESEARCH REQUIRED
+  </Tab>
+
+  <Tab title="Research Phase">
+    ```
+    Research Plan:
+    1. Check if any auth exists currently
+    2. Review package.json for auth libraries
+    3. Explore project architecture
+    4. Research authentication best practices for stack
+    5. Check for any auth requirements in docs
+    ```
+
+    **Research Findings:**
+    ```bash
+    # Current state
+    Grep: "auth|login|session|jwt"
+    Result: No existing auth code
+
+    # Dependencies
+    Read: package.json
+    Result: Express 4.18.2, no auth libraries installed
+
+    # Architecture
+    Result: Express REST API, MongoDB database, microservices planned
+
+    # Best practices research
+    WebSearch: "Express authentication best practices 2024"
+    WebSearch: "JWT vs session authentication microservices"
+    Result: JWT recommended for microservices, session for monoliths
+
+    # Requirements
+    Read: README.md, docs/requirements.md
+    Result: "Must support mobile app" mentioned
+    ```
+
+    **Key Insights:**
+    - No existing authentication
+    - Express.js backend with REST API
+    - MongoDB database available
+    - Microservices architecture planned
+    - Must support mobile app (stateless preferred)
+    - JWT is industry standard for this stack
+  </Tab>
+
+  <Tab title="Questions Asked">
+    ```json
+    {
+      "questions": [
+        {
+          "question": "Which authentication method should be implemented?",
+          "header": "Auth method",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "JWT with refresh tokens",
+              "description": "Stateless authentication. Access token (short-lived) + refresh token (long-lived). Best for microservices and mobile apps. Industry standard for this use case."
+            },
+            {
+              "label": "Session-based with MongoDB",
+              "description": "Server-side sessions stored in MongoDB (connect-mongo). Simpler to implement, easier to invalidate. Works but less ideal for mobile/microservices."
+            },
+            {
+              "label": "OAuth 2.0 integration",
+              "description": "Delegate to third-party providers (Google, GitHub). Good user experience, but requires provider setup and internet connectivity."
+            }
+          ]
+        },
+        {
+          "question": "Where should JWT tokens be stored on the client?",
+          "header": "Token store",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "HttpOnly cookies",
+              "description": "Server sets cookie with HttpOnly flag. Protected from XSS attacks. Requires CSRF protection. Best for web apps."
+            },
+            {
+              "label": "Authorization header",
+              "description": "Client stores in memory, sends via Bearer token. Required for mobile apps. Client handles storage and sending."
+            },
+            {
+              "label": "Both (web and mobile)",
+              "description": "Support cookies for web, Authorization header for mobile. Maximum flexibility but adds complexity."
+            }
+          ]
+        },
+        {
+          "question": "What should be included in the authentication scope?",
+          "header": "Scope",
+          "multiSelect": true,
+          "options": [
+            {
+              "label": "Login/register endpoints",
+              "description": "POST /auth/register and POST /auth/login. Basic authentication flow."
+            },
+            {
+              "label": "Password reset flow",
+              "description": "Forgot password email workflow. Important for production but adds complexity."
+            },
+            {
+              "label": "Role-based access control",
+              "description": "User roles (admin, user, guest) with permission checking. Essential for most apps."
+            },
+            {
+              "label": "Email verification",
+              "description": "Verify email on registration. Prevents fake accounts but requires email service."
+            }
+          ]
+        }
+      ]
+    }
+    ```
+
+    **User Answers:**
+    1. "JWT with refresh tokens"
+    2. "Both (web and mobile)"
+    3. ["Login/register endpoints", "Role-based access control"]
+  </Tab>
+
+  <Tab title="Execution">
+    Claude implements the complete authentication system:
+
+    ```typescript
+    // src/auth/jwt.ts
+    import jwt from 'jsonwebtoken';
+
+    export function generateAccessToken(userId: string, role: string) {
+      return jwt.sign({ userId, role }, process.env.JWT_SECRET, {
+        expiresIn: '15m'
+      });
+    }
+
+    export function generateRefreshToken(userId: string) {
+      return jwt.sign({ userId }, process.env.REFRESH_SECRET, {
+        expiresIn: '7d'
+      });
+    }
+    ```
+
+    ```typescript
+    // src/routes/auth.ts
+    router.post('/register', async (req, res) => {
+      const { email, password, role } = req.body;
+      const user = await User.create({ email, password, role: role || 'user' });
+      
+      const accessToken = generateAccessToken(user.id, user.role);
+      const refreshToken = generateRefreshToken(user.id);
+      
+      // HttpOnly cookie for web
+      res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: true });
+      
+      // Also return in body for mobile
+      res.json({ accessToken, refreshToken });
+    });
+
+    router.post('/login', async (req, res) => {
+      // Similar dual-mode response
+    });
+    ```
+
+    ```typescript
+    // src/middleware/auth.ts
+    export function requireAuth(req, res, next) {
+      // Check both Authorization header and cookie
+      const token = req.headers.authorization?.split(' ')[1] || req.cookies.accessToken;
+      
+      if (!token) return res.status(401).json({ error: 'Unauthorized' });
+      
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+        next();
+      } catch (error) {
+        res.status(401).json({ error: 'Invalid token' });
+      }
+    }
+
+    export function requireRole(role: string) {
+      return (req, res, next) => {
+        if (req.user.role !== role) {
+          return res.status(403).json({ error: 'Forbidden' });
+        }
+        next();
+      };
+    }
+    ```
+
+    **Result:** Full JWT authentication with dual-mode support and RBAC.
+  </Tab>
+</Tabs>
+
+---
+
+## Key Transformation Patterns
+
+<AccordionGroup>
+  <Accordion title="Generic to Specific">
+    **Pattern:** Vague action words ("fix", "improve", "refactor") are transformed into precise targets through codebase research.
+
+    **Example transformations:**
+    - "fix the bug" → "Fix token validation in auth.ts:89 (FIXME comment, 2 failing tests)"
+    - "refactor the code" → "Extract UserService class following ProductService pattern"
+    - "improve performance" → "Add Redis caching to /api/products with 1-minute TTL"
+  </Accordion>
+
+  <Accordion title="Feature to Architecture">
+    **Pattern:** Broad feature requests become architectural decisions through stack analysis and best practices research.
+
+    **Example transformations:**
+    - "add authentication" → "JWT with refresh tokens, dual-mode (cookies + headers), with RBAC"
+    - "implement caching" → "Redis with 1-minute TTL for product catalog and user profiles"
+    - "add logging" → "Winston with rotating file transport, JSON format for log aggregation"
+  </Accordion>
+
+  <Accordion title="Ambiguous to Multi-Faceted">
+    **Pattern:** Single vague requests expand into multiple decision points when research reveals complexity.
+
+    **Example transformations:**
+    - "implement caching" → 3 questions: target endpoints, strategy (Redis vs in-memory), TTL duration
+    - "add authentication" → 3 questions: auth method, token storage, scope (login/register/reset/RBAC)
+    - "improve error handling" → 2 questions: logging strategy, error response format
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+All options presented to users are grounded in actual research findings from the codebase, documentation, or best practices—never generic assumptions.
+</Note>

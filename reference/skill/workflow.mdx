@@ -1,0 +1,681 @@
+---
+title: "Workflow"
+description: "The complete 4-phase process from research to execution"
+---
+
+The prompt-improver skill follows a systematic 4-phase approach to transform vague prompts into actionable requests.
+
+## Overview
+
+When a prompt is determined to be vague (by the UserPromptSubmit hook), the skill guides you through:
+
+<Steps>
+  <Step title="Research">
+    Gather context through conversation history, codebase exploration, and documentation
+  </Step>
+  
+  <Step title="Generate Questions">
+    Formulate targeted questions based on research findings
+  </Step>
+  
+  <Step title="Get Clarification">
+    Present questions to user with specific, grounded options
+  </Step>
+  
+  <Step title="Execute">
+    Fulfill the original request using clarifications and research
+  </Step>
+</Steps>
+
+<Note>
+The skill assumes the prompt has already been identified as vague by the hook. It proceeds directly to research and clarification.
+</Note>
+
+## Phase 1: Research
+
+**Goal:** Gather context to ground your questions in actual findings rather than assumptions.
+
+### Create Research Plan
+
+Before executing research, use TodoWrite to create a dynamic research plan:
+
+```markdown
+Research Plan for "[Prompt]":
+1. [What to research] - [Tool/approach]
+2. [What to research] - [Tool/approach]
+3. [What to research] - [Tool/approach]
+```
+
+**Example for "fix the bug":**
+
+<CodeGroup>
+```markdown Research Plan
+Research Plan for "fix the bug":
+1. Check conversation history for error messages
+2. Search for failing tests - Grep for "failing", "error", "TODO"
+3. Explore recent commits - Git log for problem areas
+4. Identify patterns in similar code - Read related files
+```
+
+```bash Execution
+# Step 1: Check conversation history
+(Review recent messages for context)
+
+# Step 2: Search for issues
+Grep: "TODO|FIXME|BUG"
+Glob: "**/*.test.ts"
+Bash: npm test
+
+# Step 3: Git history
+Bash: git log --grep="fix|bug" --oneline -10
+
+# Step 4: Read related files
+Read: auth.ts, test_auth.test.ts
+```
+</CodeGroup>
+
+### Research Priority Order
+
+<Steps>
+  <Step title="Check conversation history FIRST">
+    Look for:
+    - Recent error messages
+    - File names mentioned
+    - Features discussed
+    - Decisions already made
+    
+    **Critical:** Conversation history can make vague prompts clear without codebase exploration.
+  </Step>
+  
+  <Step title="Review codebase if needed">
+    Use Task/Explore for architecture, Grep/Glob for specific patterns:
+    - Task/Explore: Map project structure, find similar implementations
+    - Grep: Search for function calls, error patterns, TODOs
+    - Glob: Find files by type or naming pattern
+    - Bash (git): Check recent changes, commit history
+  </Step>
+  
+  <Step title="Gather additional context">
+    When needed:
+    - Read: Local documentation (README.md, docs/)
+    - WebFetch: Official documentation for libraries
+    - WebSearch: Best practices, common patterns, current approaches
+  </Step>
+  
+  <Step title="Document findings">
+    Summarize what you learned before asking questions:
+    - Key files involved
+    - Existing patterns found
+    - Constraints discovered
+    - Options identified from research
+  </Step>
+</Steps>
+
+### Research Example
+
+**Prompt:** "add authentication"
+
+<Accordion title="View complete research process">
+  <Steps>
+    <Step title="Check conversation history">
+      No recent authentication discussion
+    </Step>
+    
+    <Step title="Explore current state">
+      ```bash
+      # Check for existing auth
+      Grep: "auth|login|session|jwt"
+      Result: No existing auth code
+      
+      # Review dependencies
+      Read: package.json
+      Finding: Express 4.18.2, no auth libraries
+      
+      # Map architecture
+      Task/Explore: Application structure
+      Result: Express REST API, MongoDB, microservices planned
+      ```
+    </Step>
+    
+    <Step title="Research best practices">
+      ```bash
+      WebSearch: "Express authentication best practices 2024"
+      Finding: Passport.js mature, NextAuth.js newer, JWT standard
+      
+      WebSearch: "JWT vs session authentication microservices"
+      Finding: JWT for stateless, sessions for simplicity
+      ```
+    </Step>
+    
+    <Step title="Document findings">
+      **Discoveries:**
+      - No existing authentication
+      - Express.js backend with REST API
+      - MongoDB database available
+      - Microservices architecture planned
+      - Must support mobile app (from README.md)
+      - JWT is industry standard for this stack
+      
+      **Options identified:**
+      1. JWT with refresh tokens (from web research)
+      2. Session-based with MongoDB (from stack analysis)
+      3. OAuth 2.0 integration (from best practices)
+    </Step>
+  </Steps>
+</Accordion>
+
+<Tip>
+**NEVER skip research.** Questions must be grounded in actual findings, not assumptions or general knowledge.
+</Tip>
+
+## Phase 2: Generate Targeted Questions
+
+**Goal:** Formulate 1-6 questions that will clarify the ambiguity, with each option traceable to research.
+
+### Question Guidelines
+
+<CardGroup cols={2}>
+  <Card title="Grounded" icon="anchor">
+    Every option comes from research: codebase findings, documentation, or common patterns discovered
+  </Card>
+  
+  <Card title="Specific" icon="bullseye">
+    Avoid vague options like "Other approach". Use concrete choices like "JWT with HttpOnly cookies"
+  </Card>
+  
+  <Card title="Multiple Choice" icon="list">
+    Provide 2-4 concrete options per question with context about trade-offs
+  </Card>
+  
+  <Card title="Focused" icon="filter">
+    Each question addresses one decision point. Separate compound questions.
+  </Card>
+</CardGroup>
+
+### Number of Questions
+
+<Tabs>
+  <Tab title="1-2 Questions">
+    **Simple ambiguity**
+    
+    Use when:
+    - Which file?
+    - Which approach?
+    - Single decision point
+    
+    **Example:** "fix the bug" → Which bug (after finding 3 potential bugs in research)
+  </Tab>
+  
+  <Tab title="3-4 Questions">
+    **Moderate complexity**
+    
+    Use when:
+    - Scope + approach + validation
+    - Multiple independent decisions
+    - Configuration choices
+    
+    **Example:** "add validation" → Where to add? What approach? How to handle existing validation?
+  </Tab>
+  
+  <Tab title="5-6 Questions">
+    **Complex scenarios**
+    
+    Use when:
+    - Major feature with architectural decisions
+    - Multiple aspects needing clarification
+    - Configuration + approach + scope + priority
+    
+    **Example:** "add authentication" → Auth method? Token storage? Scope (login/register/roles/verification)? Migration strategy?
+    
+    <Warning>
+    Only use 5-6 questions when truly necessary. Most scenarios should use 1-4 questions.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Question Generation Example
+
+Based on authentication research above:
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which authentication method should be implemented?",
+      "header": "Auth method",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "JWT with refresh tokens",
+          "description": "Stateless authentication. Access token (short-lived) + refresh token (long-lived). Best for microservices and mobile apps. Industry standard for this use case."
+        },
+        {
+          "label": "Session-based with MongoDB",
+          "description": "Server-side sessions stored in MongoDB (connect-mongo). Simpler to implement, easier to invalidate. Works but less ideal for mobile/microservices."
+        },
+        {
+          "label": "OAuth 2.0 integration",
+          "description": "Delegate to third-party providers (Google, GitHub). Good user experience, but requires provider setup and internet connectivity."
+        }
+      ]
+    },
+    {
+      "question": "What should be included in the authentication scope?",
+      "header": "Scope",
+      "multiSelect": true,
+      "options": [
+        {
+          "label": "Login/register endpoints",
+          "description": "POST /auth/register and POST /auth/login. Basic authentication flow."
+        },
+        {
+          "label": "Password reset flow",
+          "description": "Forgot password email workflow. Important for production but adds complexity."
+        },
+        {
+          "label": "Role-based access control",
+          "description": "User roles (admin, user, guest) with permission checking. Essential for most apps."
+        },
+        {
+          "label": "Email verification",
+          "description": "Verify email on registration. Prevents fake accounts but requires email service."
+        }
+      ]
+    }
+  ]
+}
+```
+
+<Tip>
+Each option is grounded in research: JWT from web search, MongoDB from stack analysis, OAuth from best practices, scope items from common patterns.
+</Tip>
+
+## Phase 3: Get Clarification
+
+**Goal:** Present your research-grounded questions to the user and gather their decisions.
+
+### Use AskUserQuestion Tool
+
+<ParamField path="questions" type="array" required>
+  Array of question objects. Each question must include:
+  
+  <Expandable title="Required fields">
+    <ResponseField name="question" type="string" required>
+      Clear, specific question ending with `?`
+    </ResponseField>
+    
+    <ResponseField name="header" type="string" required>
+      Short label for UI (max 12 characters)
+    </ResponseField>
+    
+    <ResponseField name="multiSelect" type="boolean" required>
+      - `false`: Single selection (most common)
+      - `true`: Multiple selections allowed
+    </ResponseField>
+    
+    <ResponseField name="options" type="array" required>
+      2-4 specific choices, each with:
+      - `label`: Concise choice (1-5 words)
+      - `description`: Context, trade-offs, implications
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+### Important Guidelines
+
+<Warning>
+- Always include `multiSelect` field (true/false)
+- User can always select "Other" for custom input (don't add generic "Other" option)
+- Include brief explanations of trade-offs in descriptions
+- Keep header ≤12 characters
+</Warning>
+
+### Tool Call Example
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which bug should be fixed?",
+      "header": "Bug target",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Token validation (auth.ts:89)",
+          "description": "FIXME comment indicates broken token validation. 2 failing tests in test_auth.test.ts related to this. Likely high priority."
+        },
+        {
+          "label": "Login redirect (recent commit)",
+          "description": "Recent commit 2 days ago attempted to fix login redirect. May have residual issues."
+        },
+        {
+          "label": "Invalid token logging (auth.ts:145)",
+          "description": "Errors being logged for invalid tokens. May be symptom of validation bug or separate issue."
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Phase 4: Execute with Context
+
+**Goal:** Fulfill the original request as if it had been clear from the start.
+
+### Execution Inputs
+
+Proceed using:
+
+<Steps>
+  <Step title="Original prompt intent">
+    What the user was trying to accomplish
+  </Step>
+  
+  <Step title="Clarification answers">
+    User's selections from your questions
+  </Step>
+  
+  <Step title="Research findings">
+    Context gathered during research phase
+  </Step>
+  
+  <Step title="Conversation history">
+    Additional context from recent messages
+  </Step>
+</Steps>
+
+### Execution Example
+
+**Original prompt:** "fix the bug"
+
+**User answer:** "Token validation (auth.ts:89)"
+
+**Research context:**
+- FIXME comment at auth.ts:89
+- 2 failing tests in test_auth.test.ts
+- Error involves JWT token validation
+
+**Execution:**
+
+<CodeGroup>
+```typescript Read auth.ts:89
+// auth.ts:89 - FIXME: Token validation is broken
+function validateToken(token: string) {
+  // Current broken implementation
+  return jwt.verify(token, process.env.SECRET);
+}
+```
+
+```typescript Fix implementation
+function validateToken(token: string) {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check token expiration
+    if (decoded.exp && decoded.exp < Date.now() / 1000) {
+      throw new Error('Token expired');
+    }
+    
+    return decoded;
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      throw new Error('Invalid token');
+    }
+    throw error;
+  }
+}
+```
+
+```bash Verify fix
+# Run the failing tests
+npm test test_auth.test.ts
+
+# Result: Tests now passing ✓
+```
+</CodeGroup>
+
+<Tip>
+Execute as if the prompt had been: "Fix the token validation bug in auth.ts:89 that's causing test failures"
+</Tip>
+
+## Complete Workflow Example
+
+Let's walk through a complete example from start to finish.
+
+### Original Prompt
+
+```
+refactor the code to be better
+```
+
+### Phase 1: Research
+
+<Accordion title="View research process">
+  <Steps>
+    <Step title="Check context">
+      User recently opened `src/api/users.ts`
+    </Step>
+    
+    <Step title="Read current state">
+      ```bash
+      Read: src/api/users.ts
+      Finding: 450 lines, all user operations in single file
+      
+      Analysis:
+      - getUserById: 45 lines
+      - createUser: 78 lines
+      - updateUser: 89 lines
+      - deleteUser: 34 lines
+      - validateUser: 56 lines
+      ```
+    </Step>
+    
+    <Step title="Find patterns">
+      ```bash
+      Glob: "src/api/*.ts"
+      Read: src/api/products.ts
+      
+      Finding: Products API uses service layer pattern (ProductService class)
+      ```
+    </Step>
+    
+    <Step title="Research best practices">
+      ```bash
+      WebSearch: "Node.js API refactoring patterns"
+      Finding: Service layer pattern, repository pattern common
+      ```
+    </Step>
+    
+    <Step title="Document findings">
+      **Discoveries:**
+      - users.ts is 450 lines, all logic in one file
+      - Other APIs (products) use service layer separation
+      - Industry pattern: Controller → Service → Repository
+      - Current code mixes validation, business logic, data access
+      
+      **Options identified:**
+      1. Extract service layer (from products.ts pattern)
+      2. Split into multiple files (size concern)
+      3. Reduce function complexity (long functions found)
+    </Step>
+  </Steps>
+</Accordion>
+
+### Phase 2: Generate Questions
+
+```json
+{
+  "questions": [
+    {
+      "question": "What aspect of the code should be improved?",
+      "header": "Improvement",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Extract service layer",
+          "description": "Create UserService class for business logic, matching ProductService pattern already used in products.ts. Separates concerns and improves testability."
+        },
+        {
+          "label": "Split into multiple files",
+          "description": "Break 450-line file into smaller modules (validation.ts, service.ts, controller.ts). Easier to navigate and maintain."
+        },
+        {
+          "label": "Reduce function complexity",
+          "description": "Refactor long functions (updateUser at 89 lines, createUser at 78 lines) into smaller, focused functions. Improves readability."
+        }
+      ]
+    },
+    {
+      "question": "Should this follow the existing ProductService pattern?",
+      "header": "Pattern",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Yes, match ProductService",
+          "description": "Maintain consistency with existing codebase. Same architecture makes it easier for team to navigate."
+        },
+        {
+          "label": "No, use different approach",
+          "description": "Opportunity to establish new pattern if ProductService approach has issues."
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Phase 3: User Answers
+
+1. **Improvement:** "Extract service layer"
+2. **Pattern:** "Yes, match ProductService"
+
+### Phase 4: Execute
+
+<CodeGroup>
+```typescript Create UserService
+// src/services/UserService.ts (new file)
+import { User } from '../models/User';
+import { UserRepository } from '../repositories/UserRepository';
+
+export class UserService {
+  constructor(private userRepository: UserRepository) {}
+  
+  async getUserById(id: string): Promise<User> {
+    const user = await this.userRepository.findById(id);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    return this.validateUser(user);
+  }
+  
+  async createUser(data: CreateUserDto): Promise<User> {
+    this.validateUserData(data);
+    return this.userRepository.create(data);
+  }
+  
+  // ... other methods
+  
+  private validateUser(user: User): User {
+    // Validation logic
+    return user;
+  }
+}
+```
+
+```typescript Update Controller
+// src/api/users.ts (refactored)
+import { UserService } from '../services/UserService';
+
+const userService = new UserService(userRepository);
+
+export async function getUserByIdHandler(req, res) {
+  try {
+    const user = await userService.getUserById(req.params.id);
+    res.json(user);
+  } catch (error) {
+    res.status(404).json({ error: error.message });
+  }
+}
+
+// ... other handlers (thin controllers)
+```
+</CodeGroup>
+
+<Tip>
+The execution follows the ProductService pattern discovered during research, maintaining codebase consistency.
+</Tip>
+
+## Key Principles
+
+<CardGroup cols={2}>
+  <Card title="Assume Vagueness" icon="triangle-exclamation">
+    Skill is only invoked for vague prompts (evaluation done by hook). Proceed directly to research.
+  </Card>
+  
+  <Card title="Research First" icon="magnifying-glass">
+    Always gather context before formulating questions. Never skip research phase.
+  </Card>
+  
+  <Card title="Ground Questions" icon="anchor">
+    Use research findings, not assumptions or base knowledge. Every option must be traceable to research.
+  </Card>
+  
+  <Card title="Be Specific" icon="bullseye">
+    Provide concrete options from actual codebase/context. Avoid generic choices.
+  </Card>
+  
+  <Card title="Stay Focused" icon="filter">
+    Max 1-6 questions, each addressing one decision point. Keep questions independent.
+  </Card>
+  
+  <Card title="Systematic Approach" icon="list-check">
+    Follow 4-phase workflow consistently: Research → Questions → Clarify → Execute
+  </Card>
+</CardGroup>
+
+## Workflow Checklist
+
+Use this checklist for each vague prompt:
+
+### Research Phase
+- [ ] Created research plan with TodoWrite
+- [ ] Checked conversation history first
+- [ ] Explored codebase for patterns
+- [ ] Gathered additional context (docs, web)
+- [ ] Documented findings before asking questions
+
+### Question Generation Phase
+- [ ] Each option grounded in research findings
+- [ ] 2-4 options per question
+- [ ] 1-6 questions total based on complexity
+- [ ] Each question focuses on one decision point
+- [ ] Descriptions include trade-offs and context
+
+### Clarification Phase
+- [ ] Used AskUserQuestion tool
+- [ ] All required fields present (question, header, multiSelect, options)
+- [ ] Header ≤12 characters
+- [ ] Question ends with `?`
+
+### Execution Phase
+- [ ] Used original prompt intent
+- [ ] Applied user's clarification answers
+- [ ] Incorporated research findings
+- [ ] Considered conversation history
+- [ ] Executed as if prompt was clear from start
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Skill Overview" href="/reference/skill/overview" icon="book">
+    Purpose, structure, and invocation patterns
+  </Card>
+  
+  <Card title="Research Strategies" href="/reference/skill/research-strategies" icon="flask">
+    Detailed guide to gathering context effectively
+  </Card>
+  
+  <Card title="Question Patterns" href="/reference/skill/question-patterns" icon="circle-question">
+    Templates and best practices for questions
+  </Card>
+</CardGroup>

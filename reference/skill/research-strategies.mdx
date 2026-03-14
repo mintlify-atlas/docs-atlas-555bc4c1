@@ -1,0 +1,536 @@
+---
+title: "Research Strategies"
+description: "Systematic approaches for gathering context before formulating clarifying questions"
+---
+
+Research is the foundation of effective clarification. The quality of your questions depends entirely on the thoroughness of your research.
+
+## Critical Rules
+
+<Warning>
+- **NEVER skip research** - Always gather context before asking questions
+- **Check conversation history first** - Avoid redundant exploration if context already exists
+- **Ground questions in findings** - Every option must come from actual research, not assumptions
+- **Document findings** - Summarize discoveries before formulating questions
+</Warning>
+
+## Research Plan Template
+
+Before executing research, create a dynamic research plan using TodoWrite:
+
+```markdown
+Research Plan for [Prompt Type]:
+1. [What to research] - [Tool/approach]
+2. [What to research] - [Tool/approach]
+3. [What to research] - [Tool/approach]
+```
+
+**Example for "fix the bug":**
+
+<Steps>
+  <Step title="Check conversation history">
+    Review recent messages for error messages, file mentions, or context clues
+  </Step>
+  
+  <Step title="Search for failing tests">
+    Use Grep to find "failing", "error", "TODO" in test files
+  </Step>
+  
+  <Step title="Explore recent commits">
+    Run git log to identify recent problem areas or fix attempts
+  </Step>
+  
+  <Step title="Identify patterns">
+    Read related files to understand error patterns and context
+  </Step>
+</Steps>
+
+## Conversation History Mining
+
+**Always start here** - Check conversation history before exploring the codebase.
+
+### Recent Context Review
+
+**Check for:**
+- Error messages in recent messages
+- File names mentioned
+- Features discussed
+- Decisions made
+- Code shown or referenced
+
+**Example:**
+
+```
+Recent messages:
+User: "I'm getting TypeError: Cannot read property 'id' of undefined"
+User: "It happens when I click the login button"
+User: "fix it"
+
+Research:
+1. Error from history: undefined property access
+2. Context: Login button click event
+3. Implied target: Login button handler
+4. Decision: Clear from context, no additional research needed
+```
+
+### Topic Tracking
+
+Last 5-10 messages establish working context:
+
+```
+Message history:
+5 messages ago: "How do I implement caching in Express?"
+3 messages ago: "Should I use Redis or in-memory cache?"
+1 message ago: "ok let's use Redis"
+Current: "implement it"
+
+Research:
+1. Topic: Caching implementation with Redis
+2. Decision made: Use Redis (not in-memory)
+3. Context: Express.js project
+4. Clear: Implement Redis caching in Express
+```
+
+<Tip>
+Conversation history can make vague prompts clear. Always check before launching codebase exploration.
+</Tip>
+
+## Codebase Exploration Strategies
+
+### Task/Explore Agent: Pattern Discovery
+
+**When to use:**
+- Need to understand architecture
+- Find similar implementations
+- Explore unknown territory
+- Map codebase structure
+
+**Approach:**
+
+```
+Use Task tool with subagent_type=Explore to:
+- Map codebase structure
+- Find similar implementations
+- Understand architectural patterns
+- Identify relevant components
+```
+
+**Example:**
+
+<CodeGroup>
+```text Prompt
+find the bug
+```
+
+```text Research
+1. Launch Explore agent: "Find error handling patterns in authentication code"
+2. Results: Discover auth.ts, middleware.ts, session.ts with different error patterns
+3. Finding: Inconsistent error handling across auth files
+```
+</CodeGroup>
+
+### Glob: Targeted File Search
+
+**When to use:** Know what you're looking for (file type, name pattern)
+
+**Common patterns:**
+
+<ParamField path="Test files" type="glob">
+  ```bash
+  **/*.test.ts
+  **/*.spec.ts
+  ```
+</ParamField>
+
+<ParamField path="Authentication files" type="glob">
+  ```bash
+  **/*auth*.ts
+  ```
+</ParamField>
+
+<ParamField path="Configuration files" type="glob">
+  ```bash
+  **/*config*.{json,yaml,yml}
+  **/.*rc
+  ```
+</ParamField>
+
+<ParamField path="Documentation" type="glob">
+  ```bash
+  **/*.md
+  **/README*
+  ```
+</ParamField>
+
+### Grep: Content Search
+
+**When to use:** Looking for specific code patterns, function calls, or keywords
+
+**Effective searches:**
+
+<AccordionGroup>
+  <Accordion title="Find authentication implementations">
+    ```bash
+    pattern: "authenticate|login|auth"
+    ```
+  </Accordion>
+  
+  <Accordion title="Find TODOs and FIXMEs">
+    ```bash
+    pattern: "TODO|FIXME|XXX|HACK"
+    ```
+  </Accordion>
+  
+  <Accordion title="Find error handling">
+    ```bash
+    pattern: "try.*catch|throw new|Error\\("
+    ```
+  </Accordion>
+  
+  <Accordion title="Find specific function calls">
+    ```bash
+    pattern: "validateUser\\(|checkAuth\\("
+    ```
+  </Accordion>
+  
+  <Accordion title="Find configuration usage">
+    ```bash
+    pattern: "process\\.env|config\\.|getConfig"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+**Example:**
+
+```
+Prompt: "improve error handling"
+
+Research:
+1. Grep: "try.*catch" with multiline mode
+2. Grep: "throw new Error"
+3. Finding: 15 try/catch blocks, 8 throw different error types
+4. Pattern: Some use custom errors (AuthError, ValidationError), some use generic Error
+```
+
+### Git Commands: Historical Context
+
+**When to use:** Understanding evolution, finding related changes
+
+**Useful commands:**
+
+<CodeGroup>
+```bash Recent commits
+git log --oneline -20
+```
+
+```bash File history
+git log --oneline path/to/file
+```
+
+```bash Search commits
+git log --grep="authentication" --oneline
+```
+
+```bash Find function addition
+git log -S "functionName" --oneline
+```
+
+```bash Recent changes
+git diff HEAD~5..HEAD --stat
+```
+</CodeGroup>
+
+## Documentation Research
+
+### Local Documentation Priority
+
+<Steps>
+  <Step title="README.md at project root">
+    Primary project overview and setup instructions
+  </Step>
+  
+  <Step title="docs/ directory">
+    Detailed documentation organized by topic
+  </Step>
+  
+  <Step title="Package-specific READMEs">
+    Individual package documentation in monorepos
+  </Step>
+  
+  <Step title="CONTRIBUTING.md">
+    Development guidelines and conventions
+  </Step>
+  
+  <Step title="Architecture docs">
+    System design and architectural decisions
+  </Step>
+</Steps>
+
+**Example:**
+
+```
+Prompt: "implement caching"
+
+Research:
+1. Read: README.md → Check if caching mentioned
+2. Read: docs/architecture.md → Current caching strategy?
+3. Finding: Redis already used for session caching
+4. Pattern: Use Redis for new caching needs (consistency)
+```
+
+### Package Documentation
+
+**Approach:**
+
+<Steps>
+  <Step title="Read package.json">
+    Identify library versions and dependencies
+  </Step>
+  
+  <Step title="Check local docs">
+    Look for usage examples in the codebase
+  </Step>
+  
+  <Step title="WebFetch official docs">
+    Consult official documentation if needed
+  </Step>
+</Steps>
+
+## Web Research for Best Practices
+
+### Current Best Practices (WebSearch)
+
+**When to use:** Need current approaches, recent changes, industry standards
+
+**Effective queries:**
+
+<CardGroup cols={2}>
+  <Card title="Framework patterns">
+    "React authentication best practices 2024"
+    
+    "Express.js error handling patterns 2024"
+  </Card>
+  
+  <Card title="Library comparisons">
+    "JWT vs session authentication comparison"
+    
+    "Joi vs Zod validation library comparison"
+  </Card>
+  
+  <Card title="Implementation approaches">
+    "implement rate limiting Node.js"
+    
+    "database transaction patterns TypeScript"
+  </Card>
+  
+  <Card title="Common problems">
+    "fix N+1 query problem TypeScript"
+    
+    "prevent SQL injection Node.js"
+  </Card>
+</CardGroup>
+
+**Example:**
+
+```
+Prompt: "add authentication"
+
+Research:
+1. WebSearch: "Node.js authentication best practices 2024"
+2. Finding: Passport.js is mature, NextAuth.js is newer, JWT is standard
+3. WebSearch: "JWT vs session authentication comparison"
+4. Finding: JWT for stateless, sessions for simplicity
+5. Pattern: Choose based on project architecture (microservices → JWT)
+```
+
+### Framework Documentation (WebFetch)
+
+**Common documentation sites:**
+
+- JavaScript/TypeScript: MDN, Node.js docs, TypeScript docs
+- Frameworks: React, Express, Next.js official sites
+- Tools: Jest, Prettier, ESLint documentation
+
+<Tip>
+Always check the version in package.json before consulting documentation to ensure compatibility.
+</Tip>
+
+## Tool Selection Guide
+
+### Choosing the Right Tool
+
+<AccordionGroup>
+  <Accordion title="Task/Explore Agent">
+    - Broad exploration needed
+    - Understanding architecture
+    - Finding similar patterns
+    - Complex multi-step research
+  </Accordion>
+  
+  <Accordion title="Glob">
+    - Finding files by name pattern
+    - Known file types
+    - Specific naming conventions
+  </Accordion>
+  
+  <Accordion title="Grep">
+    - Searching code content
+    - Finding function calls
+    - Pattern matching
+    - TODO/FIXME discovery
+  </Accordion>
+  
+  <Accordion title="Read">
+    - Reading specific files
+    - Documentation review
+    - Configuration inspection
+    - Package.json analysis
+  </Accordion>
+  
+  <Accordion title="Bash (git commands)">
+    - Historical context
+    - Recent changes
+    - Commit messages
+    - File history
+  </Accordion>
+  
+  <Accordion title="WebSearch">
+    - Current best practices
+    - Industry standards
+    - Library comparisons
+    - Common solutions
+  </Accordion>
+  
+  <Accordion title="WebFetch">
+    - Official documentation
+    - Specific documentation pages
+    - API references
+    - Tutorial content
+  </Accordion>
+</AccordionGroup>
+
+## Multi-Tool Research Patterns
+
+### Quick Research (1-2 tools)
+
+**When:** Simple ambiguity, limited scope
+
+```
+Prompt: "add tests"
+
+Research:
+1. Glob: "**/*.test.ts" → Find test pattern
+2. Read: "src/__tests__/example.test.ts" → See structure
+
+Findings:
+- Jest framework
+- Tests in __tests__/ directories
+- Pattern established
+```
+
+### Moderate Research (3-4 tools)
+
+**When:** Multiple unknowns, need pattern understanding
+
+<Steps>
+  <Step title="Grep for patterns">
+    Find current implementation patterns in codebase
+  </Step>
+  
+  <Step title="Read key files">
+    Understand existing implementations
+  </Step>
+  
+  <Step title="WebSearch best practices">
+    Research industry standards and recommendations
+  </Step>
+  
+  <Step title="Task/Explore mapping">
+    Map how patterns flow through the application
+  </Step>
+</Steps>
+
+### Comprehensive Research (5+ tools)
+
+**When:** Major feature, architectural decision, complex implementation
+
+```
+Prompt: "add authentication"
+
+Research:
+1. Read: package.json → Current dependencies
+2. Task/Explore: Map current auth (if any)
+3. Grep: "auth|login|session" → Find existing code
+4. WebSearch: "Node.js authentication best practices 2024"
+5. WebSearch: "JWT vs session comparison"
+6. WebFetch: Express security best practices
+7. Bash: git log --grep="auth" → Historical attempts
+
+Findings:
+- No existing auth system
+- Express.js backend with REST API
+- Microservices architecture (suggests JWT)
+- Security requirements in docs
+- Industry standard: JWT with refresh tokens
+```
+
+## Research Documentation Template
+
+After research, document findings before asking questions:
+
+```markdown
+## Research Findings for "[Prompt]"
+
+**What was unclear:**
+- [List ambiguities]
+
+**Research executed:**
+1. [Tool] - [What searched] - [Key finding]
+2. [Tool] - [What searched] - [Key finding]
+
+**Key discoveries:**
+- [Important finding 1]
+- [Important finding 2]
+- [Pattern identified]
+- [Constraint discovered]
+
+**Options identified:**
+1. [Option A] - [From research source]
+2. [Option B] - [From research source]
+3. [Option C] - [From research source]
+
+**Questions to ask:**
+- [Question 1 based on findings]
+- [Question 2 based on findings]
+```
+
+## Research Checklist
+
+Before asking questions, verify:
+
+- [ ] Created research plan with TodoWrite
+- [ ] Checked conversation history for context
+- [ ] Explored codebase for existing patterns
+- [ ] Searched for similar implementations
+- [ ] Reviewed relevant documentation
+- [ ] Researched best practices (if needed)
+- [ ] Documented findings
+- [ ] Generated specific options from research
+- [ ] Verified each option is grounded in findings
+- [ ] Marked research phase complete in todo list
+
+<Note>
+Research quality directly determines question quality. Take time to gather thorough context before formulating questions.
+</Note>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Question Patterns" href="/reference/skill/question-patterns" icon="circle-question">
+    How to transform research findings into effective questions
+  </Card>
+  
+  <Card title="Workflow" href="/reference/skill/workflow" icon="diagram-project">
+    Complete 4-phase process from research to execution
+  </Card>
+</CardGroup>

@@ -1,0 +1,291 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Claude Code Prompt Improver
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Plugin not showing in /plugin list">
+    **Problem:** After installation, the prompt-improver plugin doesn't appear when you run `/plugin`.
+
+    **Solutions:**
+
+    1. **Verify installation:**
+       ```bash
+       claude plugin list
+       ```
+       Check if `prompt-improver` appears in the installed plugins list.
+
+    2. **Check marketplace registration:**
+       ```bash
+       claude plugin marketplace list
+       ```
+       Ensure `severity1-marketplace` (or your local marketplace) is registered.
+
+    3. **Reinstall the plugin:**
+       ```bash
+       claude plugin uninstall prompt-improver
+       claude plugin install prompt-improver@severity1-marketplace
+       ```
+
+    4. **Restart Claude Code:**
+       Completely quit and restart Claude Code to ensure plugin registration.
+
+    <Warning>
+      If using local development installation, verify the absolute path to `.dev-marketplace/.claude-plugin/marketplace.json` is correct.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Hook not being called">
+    **Problem:** The hook doesn't intercept your prompts - no evaluation happens.
+
+    **Verification steps:**
+
+    1. **Check hook registration:**
+       Look for hook confirmation in Claude Code startup logs. Should see "Registered X hooks from Y plugins".
+
+    2. **Test with a vague prompt:**
+       ```bash
+       claude "fix the bug"
+       ```
+       You should see evaluation wrapper text mentioning "PROMPT EVALUATION".
+
+    3. **Verify hooks directory:**
+       For manual installation, check:
+       ```bash
+       ls -la ~/.claude/hooks/improve-prompt.py
+       ```
+       File should exist and be executable.
+
+    4. **Check settings.json (manual installation only):**
+       ```bash
+       cat ~/.claude/settings.json
+       ```
+       Verify `UserPromptSubmit` hook is configured.
+
+    **Common causes:**
+    - Plugin installed but hooks not registered (v0.3.2 issue - fixed in v0.4.0+)
+    - Incorrect marketplace source path
+    - Settings.json syntax error (manual installation)
+
+    <Tip>
+      Use plugin installation (marketplace) instead of manual installation to avoid hook registration issues.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Evaluation always passing through">
+    **Problem:** Every prompt proceeds immediately without questions, even vague ones.
+
+    **Diagnostic steps:**
+
+    1. **Verify you're not using bypass prefixes:**
+       - `*` prefix: Skips evaluation entirely
+       - `/` prefix: Slash commands bypass
+       - `#` prefix: Memorize commands bypass
+
+       Example: `claude "* add feature"` will bypass evaluation.
+
+    2. **Check conversation history:**
+       The hook uses conversation history to evaluate clarity. If recent messages provide context, Claude may determine the prompt is clear.
+
+    3. **Test with genuinely vague prompt:**
+       ```bash
+       claude "fix it"
+       ```
+       This should trigger evaluation and potential questions.
+
+    4. **Verify hook output format:**
+       Run the hook script manually to check output:
+       ```bash
+       echo '{"prompt":"fix the bug"}' | python3 ~/.claude/hooks/improve-prompt.py
+       ```
+       Should return JSON with "PROMPT EVALUATION" in additionalContext.
+
+    <Note>
+      This is **expected behavior** for clear prompts. The system is designed to rarely intervene. Most prompts should pass through unchanged.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Skill not being invoked">
+    **Problem:** Hook evaluates prompts but never invokes the `prompt-improver` skill.
+
+    **Debugging approach:**
+
+    1. **Check skill registration:**
+       ```bash
+       cat .claude-plugin/plugin.json
+       ```
+       Verify `skills` field points to `./skills/prompt-improver`.
+
+    2. **Verify skill directory structure:**
+       ```bash
+       ls -la skills/prompt-improver/
+       ls -la skills/prompt-improver/references/
+       ```
+       Should contain:
+       - `SKILL.md` (with YAML frontmatter)
+       - `references/question-patterns.md`
+       - `references/research-strategies.md`
+       - `references/examples.md`
+
+    3. **Test YAML frontmatter:**
+       ```bash
+       head -n 10 skills/prompt-improver/SKILL.md
+       ```
+       Should start with:
+       ```yaml
+       ---
+       name: prompt-improver
+       description: ...
+       ---
+       ```
+
+    4. **Manual skill invocation:**
+       Test the skill directly:
+       ```
+       Use the prompt-improver skill to research and clarify: "add authentication"
+       ```
+
+    <Warning>
+      Skill paths must use forward slashes (Unix-style), even on Windows. Backslashes will cause skill loading to fail.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Questions not appearing">
+    **Problem:** Skill is invoked but Claude doesn't ask clarifying questions.
+
+    **Possible causes:**
+
+    1. **Prompt is actually clear:**
+       The skill may determine after research that the prompt has sufficient context and proceed without questions. Check conversation history and codebase context.
+
+    2. **Research phase failing:**
+       Look for todo tasks in the conversation. The skill uses TodoWrite to plan research. If todos aren't appearing, the skill may not be loading properly.
+
+    3. **AskUserQuestion tool not available:**
+       Requires Claude Code 2.0.22+. Check your version:
+       ```bash
+       claude --version
+       ```
+
+    4. **Skill assumptions:**
+       SKILL.md assumes prompt is already determined vague by the hook. If invoked manually on a clear prompt, it may skip questions.
+
+    **Expected behavior:**
+    - Skill creates research plan (visible as todos)
+    - Executes research using Task/Explore/WebSearch
+    - Documents findings
+    - Asks 1-6 grounded questions based on research
+
+    <Info>
+      Questions are grounded in research findings, not generic guesses. If research reveals sufficient context, no questions may be needed.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+## Debug Workflow
+
+Follow this systematic approach to diagnose issues:
+
+### Step 1: Verify Installation
+
+```bash
+# Check plugin is installed
+claude plugin list
+
+# Check marketplace is registered
+claude plugin marketplace list
+
+# For plugin installation: restart Claude Code
+```
+
+### Step 2: Test Hook Execution
+
+```bash
+# Test with a vague prompt
+claude "fix the bug"
+
+# Check for evaluation wrapper in output
+# Should see "PROMPT EVALUATION" text
+```
+
+### Step 3: Test Bypass Mechanisms
+
+```bash
+# Test asterisk bypass
+claude "* add dark mode"
+
+# Test slash command
+claude "/help"
+
+# Test hash prefix
+claude "# use TypeScript"
+```
+
+### Step 4: Verify Skill Structure
+
+```bash
+# Check skill files exist
+ls -la skills/prompt-improver/SKILL.md
+ls -la skills/prompt-improver/references/
+
+# Validate YAML frontmatter
+head -n 10 skills/prompt-improver/SKILL.md
+```
+
+### Step 5: Run Test Suite
+
+<Warning>
+  Running tests helps identify specific component failures.
+</Warning>
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test suites
+pytest tests/test_hook.py      # Hook bypass and JSON output
+pytest tests/test_skill.py     # Skill structure and references
+pytest tests/test_integration.py  # End-to-end flow
+```
+
+### Step 6: Manual Component Testing
+
+**Test hook script directly:**
+```bash
+echo '{"prompt":"add auth"}' | python3 scripts/improve-prompt.py
+```
+
+**Test skill invocation:**
+```
+Use the prompt-improver skill to research: "implement caching"
+```
+
+## Getting Help
+
+If issues persist after troubleshooting:
+
+1. **Check version compatibility:**
+   - Claude Code 2.0.22+ required
+   - Plugin version 0.5.0+ recommended
+
+2. **Review installation method:**
+   - Marketplace installation (recommended)
+   - Local dev installation (for development)
+   - Manual installation (fallback)
+
+3. **Check recent changes:**
+   - See [Changelog](/advanced/changelog) for breaking changes
+   - Version 0.4.0 introduced skill-based architecture
+   - Version 0.3.2 fixed hook registration
+
+4. **File an issue:**
+   - Provide Claude Code version
+   - Provide plugin version
+   - Include hook output (if any)
+   - Share test suite results
+
+<Tip>
+  Most issues are resolved by reinstalling via marketplace and restarting Claude Code.
+</Tip>

@@ -1,0 +1,448 @@
+---
+title: Skill System
+description: Understanding the prompt-improver skill structure, workflow phases, and progressive disclosure of reference materials
+---
+
+## Overview
+
+The skill layer provides systematic research and question generation guidance when the hook determines a prompt is vague. It uses progressive disclosure to load detailed references only when needed.
+
+<Info>
+**Location**: `skills/prompt-improver/` with core workflow in SKILL.md (~170 lines) and on-demand reference files (700-1000 lines total).
+</Info>
+
+## Skill Structure
+
+The skill follows Claude Code skill conventions:
+
+### Directory Layout
+
+```
+skills/prompt-improver/
+├── SKILL.md                          # Core workflow (~170 lines)
+└── references/                        # Progressive disclosure
+    ├── question-patterns.md           # Templates (200-300 lines)
+    ├── research-strategies.md         # Context gathering (300-400 lines)
+    └── examples.md                    # Real transformations (200-300 lines)
+```
+
+### SKILL.md Structure
+
+The main skill file uses YAML frontmatter and markdown content:
+
+```yaml
+---
+name: prompt-improver
+description: This skill enriches vague prompts with targeted research and clarification before execution. Should be used when a prompt is determined to be vague and requires systematic research, question generation, and execution guidance.
+---
+```
+
+<ParamField path="name" type="string" required>
+  Skill identifier: lowercase, hyphens, max 64 characters
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Skill purpose and activation triggers: under 1024 characters, third-person form
+</ParamField>
+
+<Note>
+The description uses third-person form ("This skill enriches...") rather than second-person ("You use this skill...") per skill-creator best practices.
+</Note>
+
+## Skill Invocation
+
+The skill can be invoked in two ways:
+
+### Automatic Invocation (Primary)
+
+```markdown
+1. User submits prompt: "fix the bug"
+2. Hook wraps with evaluation prompt
+3. Claude evaluates: vague (no target, no context)
+4. Claude invokes: prompt-improver skill
+5. Skill guides through research and questioning
+```
+
+### Manual Invocation (Secondary)
+
+```markdown
+Use the prompt-improver skill to research and clarify: "add authentication"
+```
+
+<Tip>
+Manual invocation is useful for testing, development, or when working on prompt evaluation systems.
+</Tip>
+
+## 4-Phase Workflow
+
+The skill guides Claude through a systematic process:
+
+### Phase 1: Research
+
+**Purpose**: Gather context before formulating questions
+
+**Process**:
+
+1. **Create research plan using TodoWrite**
+   ```markdown
+   Research Plan:
+   1. Check conversation history first
+   2. Review codebase if needed
+   3. Gather additional context as needed
+   4. Document findings
+   ```
+
+2. **Check conversation history first**  
+   Avoid redundant exploration if context already exists
+
+3. **Review codebase if needed**:
+   - Task/Explore for architecture and project structure
+   - Grep/Glob for specific patterns, related files
+   - Check git log for recent changes
+   - Search for errors, failing tests, TODO/FIXME comments
+
+4. **Gather additional context**:
+   - Read local documentation files
+   - WebFetch for online documentation
+   - WebSearch for best practices, common approaches
+
+5. **Document findings**  
+   Ground questions in actual project context
+
+**Critical Rules** (from SKILL.md:50-54):
+- NEVER skip research
+- Check conversation history before exploring codebase
+- Questions must be grounded in actual findings, not assumptions
+
+<Warning>
+Skipping research leads to generic questions based on base knowledge rather than project-specific context.
+</Warning>
+
+### Phase 2: Generate Targeted Questions
+
+**Purpose**: Formulate 1-6 questions based on research findings
+
+**Question Guidelines** (from SKILL.md:58-72):
+
+<AccordionGroup>
+  <Accordion title="Grounded">
+    Every option comes from research:
+    - Codebase findings
+    - Documentation references
+    - Common patterns from web search
+    - Git history patterns
+    
+    **Bad**: "Use some state management"  
+    **Good**: "Use Redux (existing pattern in src/store/)" ← grounded in codebase
+  </Accordion>
+
+  <Accordion title="Specific">
+    Avoid vague options:
+    
+    **Bad**: "Use a different approach"  
+    **Good**: "Use JWT tokens with HttpOnly cookies"
+  </Accordion>
+
+  <Accordion title="Multiple Choice">
+    Provide 2-4 concrete options per question:
+    
+    ```markdown
+    Which authentication approach?
+    ○ JWT tokens with HttpOnly cookies (existing pattern)
+    ○ Session-based with Redis (requires new dependency)
+    ○ OAuth 2.0 with third-party provider
+    ```
+  </Accordion>
+
+  <Accordion title="Focused">
+    One decision point per question:
+    
+    **Bad**: "Which file and what approach?" (two questions)
+    **Good**: "Which file?" + separate "What approach?" question
+  </Accordion>
+
+  <Accordion title="Contextual">
+    Include brief explanations of trade-offs:
+    
+    ```markdown
+    ○ JWT tokens (stateless, scales horizontally)
+    ○ Sessions (simpler, requires state management)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+**Number of Questions** (from SKILL.md:67-72):
+- **1-2 questions**: Simple ambiguity (which file? which approach?)
+- **3-4 questions**: Moderate complexity (scope + approach + validation)
+- **5-6 questions**: Complex scenarios (major feature with multiple decision points)
+
+### Phase 3: Get Clarification
+
+**Purpose**: Present research-grounded questions using AskUserQuestion tool
+
+**Tool Format** (from SKILL.md:76-90):
+
+<ParamField path="question" type="string" required>
+  Clear, specific question ending with ?
+</ParamField>
+
+<ParamField path="header" type="string" required>
+  Short label (max 12 chars) for UI display
+</ParamField>
+
+<ParamField path="multiSelect" type="boolean" required>
+  false unless choices aren't mutually exclusive. User can always select "Other" for custom input.
+</ParamField>
+
+<ParamField path="options" type="array" required>
+  Array of 2-4 specific choices from research
+  
+  <ParamField path="label" type="string" required>
+    Concise choice text (1-5 words)
+  </ParamField>
+  
+  <ParamField path="description" type="string">
+    Context about this option (trade-offs, implications)
+  </ParamField>
+</ParamField>
+
+**Example**:
+
+```json
+{
+  "question": "Which bug needs fixing?",
+  "header": "Target",
+  "multiSelect": false,
+  "options": [
+    {
+      "label": "Login auth failure",
+      "description": "auth.py:145 - try/catch swallowing errors"
+    },
+    {
+      "label": "Session timeout",
+      "description": "session.py:89 - premature expiration"
+    },
+    {
+      "label": "Other",
+      "description": "Paste error message"
+    }
+  ]
+}
+```
+
+### Phase 4: Execute with Context
+
+**Purpose**: Proceed with original request using clarifications
+
+**Available Context** (from SKILL.md:92-99):
+- Original prompt intent
+- Clarification answers from user
+- Research findings and context
+- Conversation history
+
+**Execution Principle**:  
+Execute the request as if it had been clear from the start.
+
+## Reference Files (Progressive Disclosure)
+
+Detailed guidance is available in reference files that load only when needed:
+
+### question-patterns.md (200-300 lines)
+
+**Purpose**: Question templates, patterns, and best practices
+
+**Contents**:
+- Question construction principles
+- AskUserQuestion tool format details
+- Question templates by category:
+  - Target clarification ("Which file/component?")
+  - Approach clarification ("How should this work?")
+  - Scope clarification ("What's included?")
+  - Validation clarification ("How to verify?")
+- Number of questions guidelines
+- Option generation best practices
+- Common pitfalls and how to avoid them
+
+**Load when**: Need detailed question formulation guidance
+
+### research-strategies.md (300-400 lines)
+
+**Purpose**: Systematic approaches for context gathering
+
+**Contents**:
+- Research planning framework
+- Codebase exploration strategies:
+  - Architecture discovery (Task/Explore)
+  - Pattern finding (Grep/Glob)
+  - Change tracking (git log)
+  - Error discovery (test failures, TODOs)
+- Documentation research approaches
+- Web research for best practices
+- Conversation history mining
+- Tool selection guide
+- Research execution patterns
+
+**Load when**: Need systematic research approach guidance
+
+### examples.md (200-300 lines)
+
+**Purpose**: Real-world prompt transformations
+
+**Contents**:
+- Comprehensive examples showing:
+  - Original vague prompt
+  - Research plan
+  - Research findings
+  - Questions generated
+  - User answers
+  - Final execution
+- Various prompt types:
+  - Bug fixes ("fix the error")
+  - Feature additions ("add authentication")
+  - Refactoring ("improve performance")
+  - Testing ("add tests")
+- Before/after comparisons
+- Token overhead analysis
+
+**Load when**: Need concrete examples for reference
+
+<Info>
+These reference files are linked from SKILL.md but only load when Claude needs detailed guidance. This prevents bloating context for simple vague prompts.
+</Info>
+
+## Example Workflow Execution
+
+Here's a complete example from SKILL.md:103-128:
+
+<Steps>
+  <Step title="Hook Evaluation">
+    Determined prompt is vague
+    
+    **Original prompt**: "fix the bug"
+    
+    **Skill invoked**: Yes (prompt lacks target and context)
+  </Step>
+  
+  <Step title="Research Plan">
+    ```markdown
+    1. Check conversation history for recent errors
+    2. Explore codebase for failing tests
+    3. Grep for TODO/FIXME comments
+    4. Check git log for recent problem areas
+    ```
+  </Step>
+  
+  <Step title="Research Findings">
+    - Recent conversation mentions login failures
+    - auth.py:145 has try/catch swallowing errors
+    - Tests failing in test_auth.py
+  </Step>
+  
+  <Step title="Questions Generated">
+    **Which bug are you referring to?**
+    - Login authentication failure (auth.py:145)
+    - Session timeout issues (session.py:89)
+    - Other
+  </Step>
+  
+  <Step title="User Answer">
+    Selected: Login authentication failure
+  </Step>
+  
+  <Step title="Execution">
+    Fix the error handling in auth.py:145 that's causing login failures
+  </Step>
+</Steps>
+
+## Clear Prompt Example (Skill Not Invoked)
+
+For comparison, here's what happens with a clear prompt (from SKILL.md:130-139):
+
+**Original prompt**:  
+"Refactor the getUserById function in src/api/users.ts to use async/await instead of promises"
+
+**Hook evaluation**: Passes all checks
+- ✓ Specific target: getUserById in src/api/users.ts
+- ✓ Clear action: refactor to async/await
+- ✓ Success criteria: use async/await instead of promises
+
+**Skill invoked**: No (prompt is clear, proceeds immediately)
+
+## Key Principles
+
+From SKILL.md:144-150:
+
+1. **Assume Vagueness**: Skill is only invoked for vague prompts (evaluation done by hook)
+2. **Research First**: Always gather context before formulating questions
+3. **Ground Questions**: Use research findings, not assumptions or base knowledge
+4. **Be Specific**: Provide concrete options from actual codebase/context
+5. **Stay Focused**: Max 1-6 questions, each addressing one decision point
+6. **Systematic Approach**: Follow 4-phase workflow (Research → Questions → Clarify → Execute)
+
+## Writing Style Conventions
+
+The skill uses imperative/infinitive form per skill-creator best practices:
+
+<Tabs>
+  <Tab title="Correct (Imperative)">
+    ```markdown
+    Create a dynamic research plan using TodoWrite.
+    
+    Check conversation history first.
+    
+    Ground questions in research findings.
+    ```
+  </Tab>
+  
+  <Tab title="Incorrect (Second-Person)">
+    ```markdown
+    You should create a dynamic research plan.
+    
+    You need to check conversation history first.
+    
+    Make sure your questions are grounded.
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+This convention makes skills feel like documentation rather than instructions, improving readability and professionalism.
+</Note>
+
+## Testing
+
+The skill is tested via `tests/test_skill.py` with 9 comprehensive tests:
+
+- YAML frontmatter validation (name, description)
+- File structure validation (SKILL.md, references/)
+- Content validation (workflow phases present)
+- Reference file existence and structure
+- Progressive disclosure links
+- Writing style conventions
+
+```python
+def test_skill_yaml_frontmatter():
+    """Validate YAML frontmatter structure"""
+    skill_path = Path("skills/prompt-improver/SKILL.md")
+    content = skill_path.read_text()
+    
+    # Extract YAML frontmatter
+    match = re.match(r'^---\n(.+?)\n---', content, re.DOTALL)
+    assert match, "SKILL.md must have YAML frontmatter"
+    
+    yaml_content = match.group(1)
+    assert 'name: prompt-improver' in yaml_content
+    assert 'description:' in yaml_content
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Hook System" icon="webhook" href="/architecture/hook-system">
+    Learn how the hook evaluates prompts and invokes this skill
+  </Card>
+  
+  <Card title="Progressive Disclosure" icon="layer-group" href="/architecture/progressive-disclosure">
+    See how reference files achieve token efficiency
+  </Card>
+</CardGroup>

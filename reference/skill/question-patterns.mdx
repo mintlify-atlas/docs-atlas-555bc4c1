@@ -1,0 +1,623 @@
+---
+title: "Question Patterns"
+description: "Templates and best practices for formulating clarifying questions grounded in research"
+---
+
+Effective questions are grounded in research findings and provide specific, actionable options that enable clear decision-making.
+
+## Question Construction Principles
+
+<CardGroup cols={2}>
+  <Card title="Ground in Research" icon="anchor">
+    Every option must come from actual findings: codebase exploration, documentation, web search, or git history.
+  </Card>
+  
+  <Card title="Be Specific" icon="bullseye">
+    Avoid generic options like "Use a different approach". Provide concrete choices like "Use JWT tokens with HttpOnly cookies".
+  </Card>
+  
+  <Card title="Provide Context" icon="circle-info">
+    Explain trade-offs in descriptions: why this option exists, what it implies, when it's appropriate.
+  </Card>
+  
+  <Card title="Stay Focused" icon="filter">
+    One decision point per question. Separate compound questions into multiple focused questions.
+  </Card>
+</CardGroup>
+
+## AskUserQuestion Tool Format
+
+The AskUserQuestion tool presents research-grounded questions to users with multiple-choice options.
+
+### Complete Structure
+
+<ParamField path="questions" type="array" required>
+  Array of question objects to present to the user
+  
+  <Expandable title="Question object properties">
+    <ParamField path="question" type="string" required>
+      Clear, specific question ending with `?`
+      
+      **Examples:**
+      - "Which authentication approach should we implement?"
+      - "Where should the validation logic be added?"
+      - "What scope should this refactoring cover?"
+    </ParamField>
+    
+    <ParamField path="header" type="string" required>
+      Short label for UI display (max 12 characters)
+      
+      **Examples:**
+      - "Auth method" (11 chars)
+      - "File target" (11 chars)
+      - "Scope" (5 chars)
+      - "Approach" (8 chars)
+    </ParamField>
+    
+    <ParamField path="multiSelect" type="boolean" required>
+      - `false`: User selects exactly one option (default for most cases)
+      - `true`: User can select multiple options (when choices aren't mutually exclusive)
+      
+      Always explicitly specify this field.
+    </ParamField>
+    
+    <ParamField path="options" type="array" required>
+      Array of 2-4 specific choices from research
+      
+      <Expandable title="Option object properties">
+        <ParamField path="label" type="string" required>
+          Concise choice text (1-5 words typically)
+          
+          **Examples:**
+          - "JWT with refresh tokens"
+          - "Session-based auth"
+          - "OAuth 2.0 integration"
+        </ParamField>
+        
+        <ParamField path="description" type="string" required>
+          Context about this option: what it means, trade-offs, implications
+          
+          **Examples:**
+          - "Stateless authentication using JWT access tokens (short-lived) and refresh tokens (stored securely). Best for distributed systems."
+          - "Server-side session storage using Redis. Simpler but requires sticky sessions or shared session store."
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example Tool Call
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which authentication approach should we implement?",
+      "header": "Auth method",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "JWT with HttpOnly cookies",
+          "description": "Store JWT in HttpOnly cookies. Prevents XSS attacks, simpler client-side code. Requires CSRF protection."
+        },
+        {
+          "label": "JWT in Authorization header",
+          "description": "Client stores JWT in memory, sends in Bearer token. More flexible for mobile apps, requires client-side token management."
+        },
+        {
+          "label": "Session-based with Redis",
+          "description": "Server-side sessions stored in Redis. Traditional approach, easier to invalidate, requires session store infrastructure."
+        }
+      ]
+    }
+  ]
+}
+```
+
+<Note>
+The user always has access to an "Other" option for custom input, so you don't need to include a generic "Other" choice.
+</Note>
+
+## Number of Questions Guidelines
+
+### 1-2 Questions: Simple Clarification
+
+**Use when:**
+- Single point of ambiguity
+- Binary or ternary choice
+- Target identification only
+
+**Example:**
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which file should be modified?",
+      "header": "Target file",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "src/auth/login.ts",
+          "description": "Main login handler with authentication logic (currently 245 lines)"
+        },
+        {
+          "label": "src/auth/middleware.ts",
+          "description": "Authentication middleware used by all protected routes (89 lines)"
+        },
+        {
+          "label": "src/auth/session.ts",
+          "description": "Session management and validation utilities (156 lines)"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 3-4 Questions: Moderate Complexity
+
+**Use when:**
+- Multiple independent decisions needed
+- Approach and scope both unclear
+- Configuration plus implementation questions
+
+**Example scenario:** Unclear where validation should happen, what approach to use, and how to handle existing code
+
+<Steps>
+  <Step title="Question 1: Component selection">
+    Which component should handle validation?
+  </Step>
+  
+  <Step title="Question 2: Approach">
+    What validation approach should be used?
+  </Step>
+  
+  <Step title="Question 3: Migration">
+    Should existing validation be preserved or replaced?
+  </Step>
+</Steps>
+
+### 5-6 Questions: Complex Scenarios
+
+**Use when:**
+- Major feature with multiple architectural decisions
+- Configuration, approach, scope, and priority all unclear
+- Multiple aspects needing independent clarification
+
+<Warning>
+Only use 5-6 questions when truly necessary. Most scenarios should use 1-4 questions.
+</Warning>
+
+**Example from research findings:**
+
+Prompt: "implement caching" with research revealing multiple decision points:
+
+1. **What to cache?** - Multiple endpoints with different characteristics
+2. **Caching strategy?** - Redis vs in-memory vs invalidation patterns
+3. **TTL duration?** - Balance between freshness and performance
+4. **Cache key format?** - How to structure cache keys
+5. **Invalidation approach?** - Time-based vs event-based
+
+## Question Templates by Category
+
+### Target Identification
+
+**When:** Unclear which file, function, or component to modify
+
+<Tabs>
+  <Tab title="File Selection">
+    ```json
+    {
+      "question": "Which file should be modified?",
+      "header": "Target file",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "src/auth/login.ts",
+          "description": "Main login handler with authentication logic (currently 245 lines)"
+        },
+        {
+          "label": "src/auth/middleware.ts",
+          "description": "Authentication middleware used by all protected routes (89 lines)"
+        },
+        {
+          "label": "src/auth/session.ts",
+          "description": "Session management and validation utilities (156 lines)"
+        }
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Function Selection">
+    ```json
+    {
+      "question": "Which function needs the changes?",
+      "header": "Function",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "validateUser()",
+          "description": "Validates user credentials against database (auth.ts:45)"
+        },
+        {
+          "label": "authenticateToken()",
+          "description": "Verifies JWT token signature and expiration (auth.ts:89)"
+        },
+        {
+          "label": "refreshSession()",
+          "description": "Extends active session duration (auth.ts:134)"
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Approach/Implementation
+
+**When:** Target is clear, but implementation approach is ambiguous
+
+<Tabs>
+  <Tab title="Technical Approach">
+    ```json
+    {
+      "question": "Which authentication approach should we implement?",
+      "header": "Auth method",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "JWT with HttpOnly cookies",
+          "description": "Store JWT in HttpOnly cookies. Prevents XSS attacks, simpler client-side code. Requires CSRF protection."
+        },
+        {
+          "label": "JWT in Authorization header",
+          "description": "Client stores JWT in memory, sends in Bearer token. More flexible for mobile apps, requires client-side token management."
+        },
+        {
+          "label": "Session-based with Redis",
+          "description": "Server-side sessions stored in Redis. Traditional approach, easier to invalidate, requires session store infrastructure."
+        }
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Architectural Pattern">
+    ```json
+    {
+      "question": "How should the validation logic be organized?",
+      "header": "Pattern",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Middleware approach",
+          "description": "Create validation middleware that runs before route handlers. Reusable across routes, centralized error handling."
+        },
+        {
+          "label": "Service layer validation",
+          "description": "Add validation to UserService class methods. Closer to business logic, easier to test in isolation."
+        },
+        {
+          "label": "Schema-based validation",
+          "description": "Define JSON schemas and use validator library. Declarative, auto-generates documentation, type-safe with TypeScript."
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Scope Questions
+
+**When:** Unclear how much work should be done
+
+<Tabs>
+  <Tab title="Feature Scope">
+    ```json
+    {
+      "question": "What scope should this refactoring cover?",
+      "header": "Scope",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Single function only",
+          "description": "Refactor just getUserById(). Minimal change, quick to implement and test."
+        },
+        {
+          "label": "Entire UserRepository class",
+          "description": "Refactor all user data access methods (8 functions). Consistent patterns across class."
+        },
+        {
+          "label": "All repository classes",
+          "description": "Apply pattern to UserRepository, ProductRepository, OrderRepository (3 classes, 24 functions). Codebase-wide consistency."
+        }
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Test Coverage">
+    ```json
+    {
+      "question": "What level of test coverage should be added?",
+      "header": "Test scope",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Happy path only",
+          "description": "Basic test for successful operation. Quick validation that feature works."
+        },
+        {
+          "label": "Happy path + error cases",
+          "description": "Success cases and expected errors (invalid input, not found, etc.). Comprehensive basic coverage."
+        },
+        {
+          "label": "Full coverage including edge cases",
+          "description": "Success, errors, edge cases (empty data, null values, rate limits, etc.). Production-ready coverage."
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration Questions
+
+**When:** Implementation requires configuration choices
+
+<Tabs>
+  <Tab title="Library Selection">
+    ```json
+    {
+      "question": "Which validation library should be used?",
+      "header": "Library",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Zod",
+          "description": "TypeScript-first schema validation. Excellent type inference, modern API. Already used in frontend."
+        },
+        {
+          "label": "Joi",
+          "description": "Mature validation library. Large ecosystem, extensive documentation. Used by many enterprise projects."
+        },
+        {
+          "label": "class-validator",
+          "description": "Decorator-based validation. Works well with TypeORM entities. Already in package.json."
+        }
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Configuration Values">
+    ```json
+    {
+      "question": "What timeout value should be configured?",
+      "header": "Timeout",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "5 seconds",
+          "description": "Aggressive timeout. Fast failures but might interrupt legitimate slow operations."
+        },
+        {
+          "label": "30 seconds",
+          "description": "Balanced timeout. Industry standard for API requests. Recommended for most use cases."
+        },
+        {
+          "label": "120 seconds",
+          "description": "Conservative timeout. Allows for slow operations (large file uploads, complex reports)."
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Option Generation Best Practices
+
+### Ground Options in Research
+
+<Tabs>
+  <Tab title="Bad (Assumption-Based)">
+    ```json
+    {
+      "label": "Use MongoDB",
+      "description": "NoSQL database, good for flexibility"
+    }
+    ```
+    
+    ❌ Generic knowledge, not grounded in project context
+  </Tab>
+  
+  <Tab title="Good (Research-Grounded)">
+    ```json
+    {
+      "label": "Use MongoDB",
+      "description": "NoSQL database. Project already uses MongoDB for user data (see db/connection.ts). Consistent with existing stack."
+    }
+    ```
+    
+    ✅ References actual codebase findings
+  </Tab>
+</Tabs>
+
+### Provide Actionable Context
+
+<Tabs>
+  <Tab title="Bad (Vague)">
+    ```json
+    {
+      "label": "Refactor approach",
+      "description": "Better way to organize code"
+    }
+    ```
+    
+    ❌ Not specific, unclear what "better" means
+  </Tab>
+  
+  <Tab title="Good (Specific)">
+    ```json
+    {
+      "label": "Extract to service layer",
+      "description": "Move business logic from controllers to UserService class. Follows repository pattern already used in OrderService and ProductService."
+    }
+    ```
+    
+    ✅ Concrete action with codebase context
+  </Tab>
+</Tabs>
+
+### Include Trade-offs
+
+<Tabs>
+  <Tab title="Bad (One-Sided)">
+    ```json
+    {
+      "label": "Microservices architecture",
+      "description": "Modern, scalable approach"
+    }
+    ```
+    
+    ❌ Only shows benefits, ignores complexity
+  </Tab>
+  
+  <Tab title="Good (Balanced)">
+    ```json
+    {
+      "label": "Microservices architecture",
+      "description": "Split into auth-service and user-service. Better scaling and independence, but adds deployment complexity. Team has Docker expertise."
+    }
+    ```
+    
+    ✅ Shows trade-offs and team context
+  </Tab>
+</Tabs>
+
+## Common Pitfalls
+
+### Pitfall 1: Generic Options
+
+<Warning>
+**Bad:** "Best practice approach" with description "Use industry standard methods"
+
+**Why bad:** Not actionable, no clear guidance
+
+**Fix:** "Repository pattern with dependency injection" - "Separate data access into UserRepository, injected via constructor. Used in OrderService (see src/services/order.service.ts:15)."
+</Warning>
+
+### Pitfall 2: Too Many Options
+
+<Warning>
+**Bad:** 6 options in a single question
+
+**Why bad:** Overwhelming, decision paralysis
+
+**Fix:** Narrow to 2-4 most relevant options based on research. If more than 4, create multiple questions or categorize.
+</Warning>
+
+### Pitfall 3: Leading Questions
+
+<Warning>
+**Bad:** "Should we use the superior JWT approach?"
+
+**Why bad:** Biased question influences answer
+
+**Fix:** "Which authentication mechanism should be implemented?" with balanced descriptions of JWT and session approaches including trade-offs.
+</Warning>
+
+### Pitfall 4: Compound Questions
+
+<Warning>
+**Bad:** "Which library and what configuration should be used?" with options combining both decisions
+
+**Why bad:** Mixing multiple decisions, exponential option growth
+
+**Fix:** Separate into two questions: one for library selection, one for configuration.
+</Warning>
+
+### Pitfall 5: Asking Without Research
+
+<Warning>
+**Bad:** Generic options like "Some approach" with description "I think this might work"
+
+**Why bad:** Not grounded in codebase reality
+
+**Fix:** Research first (explore codebase for existing patterns, check package.json, review similar implementations, web search for framework-specific best practices), then generate options based on findings.
+</Warning>
+
+## Real-World Example
+
+**Prompt:** "fix the bug"
+
+**Research findings:**
+- Found FIXME in auth.ts:89: "Token validation is broken"
+- 2 failing tests in test_auth.test.ts related to tokens
+- Recent commit attempted to fix login redirect
+- Error logging at auth.ts:145 for invalid tokens
+
+**Generated question:**
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which bug should be fixed?",
+      "header": "Bug target",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Token validation (auth.ts:89)",
+          "description": "FIXME comment indicates broken token validation. 2 failing tests in test_auth.test.ts related to this. Likely high priority."
+        },
+        {
+          "label": "Login redirect (recent commit)",
+          "description": "Recent commit 2 days ago attempted to fix login redirect. May have residual issues."
+        },
+        {
+          "label": "Invalid token logging (auth.ts:145)",
+          "description": "Errors being logged for invalid tokens. May be symptom of validation bug or separate issue."
+        }
+      ]
+    }
+  ]
+}
+```
+
+<Tip>
+Every option is traceable back to research findings: FIXME comment, failing tests, git log, grep results.
+</Tip>
+
+## Question Quality Checklist
+
+Before using AskUserQuestion tool:
+
+- [ ] Completed research phase with documented findings
+- [ ] Each option grounded in research (not assumptions)
+- [ ] Each option is specific and actionable (not generic)
+- [ ] Descriptions include context and trade-offs
+- [ ] Questions are focused (one decision per question)
+- [ ] Using 1-6 questions based on complexity
+- [ ] Each question has 2-4 options
+- [ ] `header` field is ≤12 characters
+- [ ] `multiSelect` explicitly set (true/false)
+- [ ] `question` ends with `?`
+
+<Note>
+The goal is clarity through specificity. Every option should be traceable back to research findings.
+</Note>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Research Strategies" href="/reference/skill/research-strategies" icon="flask">
+    How to gather context that grounds your questions
+  </Card>
+  
+  <Card title="Workflow" href="/reference/skill/workflow" icon="diagram-project">
+    Complete process from research through execution
+  </Card>
+</CardGroup>

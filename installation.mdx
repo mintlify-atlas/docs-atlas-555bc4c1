@@ -1,0 +1,187 @@
+---
+title: "Installation"
+description: "Install the Claude Code Prompt Improver via marketplace, local development, or manual setup"
+---
+
+## Requirements
+
+<Note>
+**Claude Code 2.0.22+** is required. The plugin uses the AskUserQuestion tool for targeted clarifying questions, which was introduced in this version.
+</Note>
+
+You can verify your Claude Code version with:
+
+```bash
+claude --version
+```
+
+## Option 1: Via Marketplace (Recommended)
+
+The easiest way to install the Prompt Improver is through the severity1 marketplace.
+
+<Steps>
+  <Step title="Add the marketplace">
+    Run the following command to add the severity1 marketplace:
+
+    ```bash
+    claude plugin marketplace add severity1/severity1-marketplace
+    ```
+  </Step>
+
+  <Step title="Install the plugin">
+    Install the prompt-improver plugin from the marketplace:
+
+    ```bash
+    claude plugin install prompt-improver@severity1-marketplace
+    ```
+  </Step>
+
+  <Step title="Restart Claude Code">
+    Restart Claude Code to activate the plugin.
+  </Step>
+
+  <Step title="Verify installation">
+    Confirm the plugin is installed by running:
+
+    ```bash
+    claude /plugin
+    ```
+
+    You should see `prompt-improver` listed in the installed plugins.
+  </Step>
+</Steps>
+
+## Option 2: Local Plugin Installation (For Development)
+
+If you're developing or customizing the plugin, install it locally from the repository.
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the repository to your local machine:
+
+    ```bash
+    git clone https://github.com/severity1/claude-code-prompt-improver.git
+    cd claude-code-prompt-improver
+    ```
+  </Step>
+
+  <Step title="Add the local marketplace">
+    Add the development marketplace from your local repository:
+
+    ```bash
+    claude plugin marketplace add /absolute/path/to/claude-code-prompt-improver/.dev-marketplace/.claude-plugin/marketplace.json
+    ```
+
+    <Note>
+    Replace `/absolute/path/to/` with the actual absolute path where you cloned the repository.
+    </Note>
+  </Step>
+
+  <Step title="Install the plugin">
+    Install the plugin from your local marketplace:
+
+    ```bash
+    claude plugin install prompt-improver@local-dev
+    ```
+  </Step>
+
+  <Step title="Restart Claude Code">
+    Restart Claude Code to activate the plugin.
+  </Step>
+
+  <Step title="Verify installation">
+    Confirm the plugin is installed:
+
+    ```bash
+    claude /plugin
+    ```
+
+    You should see the message "1 plugin available, 1 already installed".
+  </Step>
+</Steps>
+
+## Option 3: Manual Installation
+
+For manual installation without using the plugin system, you can install the hook directly.
+
+<Steps>
+  <Step title="Copy the hook script">
+    Copy the hook script to your Claude hooks directory:
+
+    ```bash
+    cp scripts/improve-prompt.py ~/.claude/hooks/
+    chmod +x ~/.claude/hooks/improve-prompt.py
+    ```
+  </Step>
+
+  <Step title="Update settings.json">
+    Edit `~/.claude/settings.json` and add the hook configuration:
+
+    ```json
+    {
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "python3 ~/.claude/hooks/improve-prompt.py"
+              }
+            ]
+          }
+        ]
+      }
+    }
+    ```
+
+    <Note>
+    If you already have other hooks configured, merge this configuration with your existing hooks array.
+    </Note>
+  </Step>
+
+  <Step title="Restart Claude Code">
+    Restart Claude Code to activate the hook.
+  </Step>
+
+  <Step title="Verify installation">
+    Test the hook by submitting a vague prompt and observing whether Claude evaluates it for clarity.
+  </Step>
+</Steps>
+
+<Note>
+**Manual installation limitations**: The manual installation method only installs the hook layer. The skill layer will not be available unless you also manually configure the skill directory. We recommend using Option 1 or Option 2 for the complete experience.
+</Note>
+
+## Troubleshooting
+
+### Plugin not showing up
+
+If the plugin doesn't appear after installation:
+
+1. Ensure you restarted Claude Code
+2. Run `claude /plugin` to check if it's listed
+3. Check that your Claude Code version is 2.0.22 or higher
+
+### Hook not triggering
+
+If the hook doesn't seem to be evaluating prompts:
+
+1. Verify the hook is registered by checking that `/plugin` shows the plugin as installed
+2. Try a clearly vague prompt like `claude "fix the bug"` to trigger evaluation
+3. Check `~/.claude/logs/` for any error messages
+
+### Permission errors
+
+If you encounter permission errors with the manual installation:
+
+```bash
+chmod +x ~/.claude/hooks/improve-prompt.py
+```
+
+Ensure the script is executable.
+
+## Next Steps
+
+<Card title="Quick Start" icon="rocket" href="/quickstart">
+  Try the plugin with your first prompt and see it in action
+</Card>

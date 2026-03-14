@@ -1,0 +1,342 @@
+---
+title: "Bypass Prefixes"
+description: "Understanding when and how to skip prompt evaluation"
+---
+
+Bypass prefixes allow you to skip the hook's evaluation process when needed. The hook (`scripts/improve-prompt.py`) checks for three special prefix characters before evaluation.
+
+## Overview
+
+The hook implements bypass logic before any evaluation occurs:
+
+```python
+# Check for bypass conditions
+# 1. Explicit bypass with * prefix
+# 2. Slash commands (built-in or custom)
+# 3. Memorize feature (# prefix)
+if prompt.startswith("*"):
+    # User explicitly bypassed improvement - remove * prefix
+    clean_prompt = prompt[1:].strip()
+    output_json(clean_prompt)
+    sys.exit(0)
+
+if prompt.startswith("/"):
+    # Slash command - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+
+if prompt.startswith("#"):
+    # Memorize feature - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+```
+
+<Info>
+Bypass checks happen at the hook level (scripts/improve-prompt.py:31-49) before any evaluation prompt is constructed.
+</Info>
+
+## * Prefix: Skip Evaluation
+
+Explicitly bypass all hook evaluation and skill invocation.
+
+### How It Works
+
+```bash
+claude "* your prompt here"
+```
+
+**Processing flow:**
+1. Hook detects `*` at start of prompt
+2. Removes `*` prefix and strips whitespace
+3. Passes cleaned prompt directly to Claude
+4. Exits immediately (no evaluation, no skill)
+
+### Code Implementation
+
+From `scripts/improve-prompt.py:35-39`:
+
+```python
+if prompt.startswith("*"):
+    # User explicitly bypassed improvement - remove * prefix
+    clean_prompt = prompt[1:].strip()
+    output_json(clean_prompt)
+    sys.exit(0)
+```
+
+### When to Use
+
+<CardGroup cols={2}>
+  <Card title="Rapid Iteration" icon="bolt">
+    You're experimenting and want quick responses without interruption
+  </Card>
+  <Card title="Have Context in Mind" icon="brain">
+    You know the prompt is vague but have clear intent from conversation
+  </Card>
+  <Card title="Testing Behavior" icon="flask">
+    You want to compare outcomes with and without enrichment
+  </Card>
+  <Card title="Time-Sensitive Tasks" icon="clock">
+    You need an immediate response and will handle clarification manually
+  </Card>
+</CardGroup>
+
+### Examples
+
+<CodeGroup>
+```bash Normal (Evaluated)
+claude "add dark mode"
+# May trigger questions about implementation approach
+```
+
+```bash Bypass (Skip Evaluation)
+claude "* add dark mode"
+# Proceeds immediately, Claude makes assumptions
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Normal (Evaluated)
+claude "fix the error"
+# Will ask which error, where, what type
+```
+
+```bash Bypass (Skip Evaluation)
+claude "* fix the error"
+# Proceeds without questions, may need follow-up
+```
+</CodeGroup>
+
+### When NOT to Use
+
+<Warning>
+**Avoid bypass when:**
+- Starting a new feature without specifications
+- Working with unfamiliar code
+- Fixing bugs without clear root cause
+- You want the best outcome on first attempt
+- The prompt is genuinely ambiguous
+</Warning>
+
+Bypass skips helpful clarification that could prevent wasted iterations or incorrect implementations.
+
+## / Prefix: Slash Commands
+
+Slash commands automatically bypass evaluation - no special action needed.
+
+### How It Works
+
+```bash
+claude "/help"
+claude "/clear"
+claude "/plugin"
+```
+
+**Processing flow:**
+1. Hook detects `/` at start of prompt
+2. Recognizes as slash command
+3. Passes through unchanged to Claude Code
+4. Exits immediately (no evaluation)
+
+### Code Implementation
+
+From `scripts/improve-prompt.py:41-44`:
+
+```python
+if prompt.startswith("/"):
+    # Slash command - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+```
+
+### Why This Matters
+
+Slash commands are built-in or custom Claude Code commands that must work without modification:
+
+- **Built-in commands**: `/help`, `/clear`, `/settings`, etc.
+- **Custom commands**: Any user-defined slash commands
+- **No evaluation needed**: Commands aren't tasks requiring clarification
+
+<Info>
+This bypass is **automatic and transparent**. You don't need to do anything - all slash commands work exactly as they would without the hook.
+</Info>
+
+### Examples
+
+```bash
+claude "/help"              # Shows help, no evaluation
+claude "/clear"             # Clears conversation, no evaluation
+claude "/plugin"            # Lists plugins, no evaluation
+claude "/custom-command"    # Your custom command, no evaluation
+```
+
+### When to Use
+
+You don't need to think about this - it happens automatically:
+
+✅ All built-in slash commands work normally  
+✅ All custom slash commands work normally  
+✅ No overhead or evaluation for commands  
+✅ No configuration needed
+
+## # Prefix: Memorize
+
+The memorize feature automatically bypasses evaluation.
+
+### How It Works
+
+```bash
+claude "# remember to use rg over grep"
+claude "# prefer async/await over .then() chains"
+```
+
+**Processing flow:**
+1. Hook detects `#` at start of prompt
+2. Recognizes as memorize command
+3. Passes through unchanged to Claude
+4. Exits immediately (no evaluation)
+
+### Code Implementation
+
+From `scripts/improve-prompt.py:46-49`:
+
+```python
+if prompt.startswith("#"):
+    # Memorize feature - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+```
+
+### Why This Matters
+
+Memorize commands are meta-instructions about preferences, not executable tasks:
+
+- **Teaching preferences**: Coding style, tool choices, patterns
+- **Project conventions**: Naming, structure, approaches
+- **Not executable**: No code to write, nothing to clarify
+
+<Note>
+Memorize commands don't need evaluation because they're instructions about **how** to work, not **what** to do.
+</Note>
+
+### Examples
+
+<CodeGroup>
+```bash Code Style Preferences
+claude "# use single quotes for strings"
+claude "# prefer const over let"
+claude "# max line length 100 characters"
+```
+
+```bash Tool Preferences
+claude "# remember to use rg over grep"
+claude "# use pnpm instead of npm"
+claude "# prefer esbuild for bundling"
+```
+
+```bash Project Conventions
+claude "# components go in src/components/"
+claude "# tests colocate with source files"
+claude "# use barrel exports for modules"
+```
+</CodeGroup>
+
+### When to Use
+
+Use memorize to establish working preferences:
+
+✅ **Coding conventions** - Style, patterns, structure  
+✅ **Tool preferences** - Which tools to use and why  
+✅ **Project norms** - Where things go, how to name them  
+✅ **Repeated guidance** - Things you find yourself saying often
+
+<Tip>
+Memorize is perfect for onboarding Claude to your project's conventions. Build up a set of preferences over time.
+</Tip>
+
+## Bypass Decision Guide
+
+Choose the right approach for your situation:
+
+<Tabs>
+  <Tab title="Let Hook Evaluate (Default)">
+    **Use when:**
+    - You want the best outcome on first try
+    - The prompt might be ambiguous
+    - Working with unfamiliar code
+    - Starting new features
+    - Fixing unclear bugs
+
+    **Benefits:**
+    - Grounded questions from research
+    - Better context for execution
+    - Fewer wasted iterations
+    - More accurate implementations
+
+    **Example:**
+    ```bash
+    claude "add authentication"
+    # Gets questions about method, scope, enforcement
+    ```
+  </Tab>
+
+  <Tab title="Use * Bypass">
+    **Use when:**
+    - Rapid experimentation
+    - You have clear context in mind
+    - Time-sensitive iterations
+    - Testing/comparing approaches
+
+    **Trade-offs:**
+    - Skip helpful clarification
+    - May need follow-up messages
+    - Claude makes assumptions
+    - Could implement wrong approach
+
+    **Example:**
+    ```bash
+    claude "* add authentication"
+    # Proceeds immediately, makes assumptions
+    ```
+  </Tab>
+
+  <Tab title="/ and # Auto-Bypass">
+    **Use when:**
+    - Running slash commands
+    - Setting preferences with memorize
+
+    **No decision needed:**
+    - These bypass automatically
+    - Work exactly as expected
+    - No configuration required
+
+    **Examples:**
+    ```bash
+    claude "/help"
+    claude "# use single quotes"
+    ```
+  </Tab>
+</Tabs>
+
+## Summary
+
+<CardGroup cols={3}>
+  <Card title="* Prefix" icon="forward">
+    **Explicit bypass**  
+    Skip evaluation, proceed immediately  
+    Use sparingly for rapid iteration
+  </Card>
+  <Card title="/ Prefix" icon="terminal">
+    **Automatic bypass**  
+    Slash commands pass through  
+    No action needed
+  </Card>
+  <Card title="# Prefix" icon="bookmark">
+    **Automatic bypass**  
+    Memorize commands pass through  
+    Perfect for preferences
+  </Card>
+</CardGroup>
+
+<Warning>
+**Remember:** Bypassing evaluation skips the hook's primary benefit - turning vague prompts into clear, actionable requests. Use bypass prefixes intentionally, not habitually.
+</Warning>

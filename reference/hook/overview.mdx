@@ -1,0 +1,180 @@
+---
+title: "Hook Overview"
+description: "UserPromptSubmit hook implementation for the Claude Code Prompt Improver"
+---
+
+## Purpose
+
+The **UserPromptSubmit** hook intercepts every user prompt before Claude Code processes it. The hook evaluates prompt clarity and wraps prompts with evaluation instructions, enabling Claude to determine whether to proceed immediately or invoke the [prompt-improver skill](/reference/skill/overview) for clarification.
+
+## Hook Configuration
+
+The hook is configured in `hooks/hooks.json` using Claude Code's auto-discovery mechanism:
+
+```json hooks/hooks.json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "description": "Improves user prompts by adding clarifying questions",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/improve-prompt.py || python ${CLAUDE_PLUGIN_ROOT}/scripts/improve-prompt.py",
+            "description": "Run the prompt improvement script"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Command Execution
+
+The hook command uses a **fallback pattern** for cross-platform compatibility:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/improve-prompt.py || python ${CLAUDE_PLUGIN_ROOT}/scripts/improve-prompt.py
+```
+
+- **Primary**: `python3` (Unix/Linux/macOS)
+- **Fallback**: `python` (Windows or systems where `python3` is aliased to `python`)
+- **Environment variable**: `${CLAUDE_PLUGIN_ROOT}` resolves to the plugin installation directory
+
+## Input Format
+
+The hook script receives JSON input via **stdin** following the UserPromptSubmit hook specification:
+
+<ParamField path="prompt" type="string" required>
+  The user's original prompt text submitted to Claude Code.
+</ParamField>
+
+### Example Input
+
+```json
+{
+  "prompt": "fix the bug"
+}
+```
+
+```json
+{
+  "prompt": "* add dark mode without evaluation"
+}
+```
+
+## Output Format
+
+The hook script outputs JSON to **stdout** with the following structure:
+
+<ParamField path="hookSpecificOutput" type="object" required>
+  Container for hook-specific response data.
+  
+  <ParamField path="hookSpecificOutput.hookEventName" type="string" required>
+    The hook event name. Always set to `"UserPromptSubmit"`.
+  </ParamField>
+  
+  <ParamField path="hookSpecificOutput.additionalContext" type="string" required>
+    The modified prompt text. This can be:
+    - The original prompt (for bypass conditions)
+    - The original prompt with `*` prefix removed
+    - The prompt wrapped with evaluation instructions
+  </ParamField>
+</ParamField>
+
+### Example Output (Bypass)
+
+When a bypass prefix is detected, the hook returns the prompt unchanged or with the prefix stripped:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "add dark mode without evaluation"
+  }
+}
+```
+
+### Example Output (Evaluation Wrapper)
+
+For normal prompts, the hook wraps the prompt with evaluation instructions:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "PROMPT EVALUATION\n\nOriginal user request: \"fix the bug\"\n\nEVALUATE: Is this prompt clear enough to execute, or does it need enrichment?\n\nPROCEED IMMEDIATELY if:\n- Detailed/specific OR you have sufficient context OR can infer intent\n\nONLY USE SKILL if genuinely vague (e.g., \"fix the bug\" with no context):\n- If vague:\n  1. First, preface with brief note: \"Hey! The Prompt Improver Hook flagged your prompt as a bit vague because [specific reason: ambiguous scope/missing context/unclear target/etc].\"\n  2. Then use the prompt-improver skill to research and generate clarifying questions\n- The skill will guide you through research, question generation, and execution\n- Trust user intent by default. Check conversation history before using the skill.\n\nIf clear, proceed with the original request. If vague, invoke the skill."
+  }
+}
+```
+
+<Note>
+  The escaped prompt in `additionalContext` contains the original user request embedded within evaluation instructions. Claude evaluates this using conversation history to determine the next action.
+</Note>
+
+## Exit Codes
+
+The hook script uses **exit code 0** for all success paths:
+
+- **Exit 0**: Successful execution (bypass detected, evaluation wrapper generated, etc.)
+- **Exit 1**: JSON parsing error (malformed input)
+
+Errors are reported to **stderr** before exiting:
+
+```python
+print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
+sys.exit(1)
+```
+
+## Implementation
+
+The hook is implemented in `scripts/improve-prompt.py` (~72 lines) using Python's standard library:
+
+```python scripts/improve-prompt.py (excerpt)
+import json
+import sys
+
+# Load input from stdin
+try:
+    input_data = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
+    sys.exit(1)
+
+prompt = input_data.get("prompt", "")
+
+# Escape quotes in prompt for safe embedding
+escaped_prompt = prompt.replace("\\", "\\\\").replace('"', '\\"')
+
+def output_json(text):
+    """Output text in UserPromptSubmit JSON format"""
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": text
+        }
+    }
+    print(json.dumps(output))
+```
+
+### Key Features
+
+1. **Stdin/Stdout JSON**: Follows Claude Code hook specification
+2. **Minimal dependencies**: Python standard library only (`json`, `sys`)
+3. **Escape handling**: Safely embeds user prompts in evaluation instructions
+4. **Error handling**: Validates JSON input and reports errors to stderr
+
+## Performance
+
+The hook adds approximately **~189 tokens** per prompt submission:
+
+- **Token overhead**: ~189 tokens (evaluation wrapper)
+- **Execution time**: Minimal (Python script startup + JSON processing)
+- **30-message session**: ~5.7k tokens (~2.8% of 200k context window)
+
+<Note>
+  Clear prompts benefit from **zero skill overhead** because Claude proceeds immediately without loading the prompt-improver skill. The evaluation happens entirely within the hook's ~189 token wrapper.
+</Note>
+
+See [Evaluation Logic](/reference/hook/evaluation-logic) for details on the evaluation prompt and bypass conditions.

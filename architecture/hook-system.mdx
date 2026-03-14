@@ -1,0 +1,405 @@
+---
+title: Hook System
+description: Deep dive into the UserPromptSubmit hook that evaluates prompt clarity and orchestrates skill invocation
+---
+
+## Overview
+
+The hook layer (`scripts/improve-prompt.py`) is a lightweight evaluation orchestrator that intercepts every user prompt, evaluates its clarity, and conditionally invokes the skill layer for enrichment.
+
+<Info>
+**Implementation**: ~70 lines of Python that runs on every prompt submission with minimal overhead (~189 tokens).
+</Info>
+
+## Hook Registration
+
+The hook is registered via `hooks/hooks.json` at the standard auto-discovery location:
+
+```json hooks/hooks.json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "description": "Improves user prompts by adding clarifying questions",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/improve-prompt.py || python ${CLAUDE_PLUGIN_ROOT}/scripts/improve-prompt.py",
+            "description": "Run the prompt improvement script"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+<Note>
+The `python3 || python` fallback ensures Windows compatibility where `python3` may not be available.
+</Note>
+
+## Hook Script Structure
+
+The hook script follows the Claude Code UserPromptSubmit specification:
+
+### Input Format
+
+Reads JSON from stdin:
+
+<ParamField path="prompt" type="string" required>
+  The user's original prompt text
+</ParamField>
+
+```python
+import json
+import sys
+
+# Load input from stdin
+try:
+    input_data = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
+    sys.exit(1)
+
+prompt = input_data.get("prompt", "")
+```
+
+### Output Format
+
+Writes JSON to stdout:
+
+<ParamField path="hookSpecificOutput" type="object" required>
+  Container for hook-specific response
+  
+  <ParamField path="hookEventName" type="string" required>
+    Must be "UserPromptSubmit"
+  </ParamField>
+  
+  <ParamField path="additionalContext" type="string" required>
+    The modified prompt text (with evaluation wrapper or bypass-cleaned)
+  </ParamField>
+</ParamField>
+
+```python
+def output_json(text):
+    """Output text in UserPromptSubmit JSON format"""
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": text
+        }
+    }
+    print(json.dumps(output))
+```
+
+<Tip>
+Always exit with code 0 for successful execution, even when bypassing evaluation.
+</Tip>
+
+## Bypass Handling
+
+The hook supports three bypass mechanisms that allow users to skip evaluation:
+
+### 1. Explicit Bypass: `*` Prefix
+
+**Purpose**: User intentionally skips evaluation  
+**Behavior**: Strip `*` prefix and pass through unchanged
+
+```python
+if prompt.startswith("*"):
+    # User explicitly bypassed improvement - remove * prefix
+    clean_prompt = prompt[1:].strip()
+    output_json(clean_prompt)
+    sys.exit(0)
+```
+
+**Example**:
+```bash
+$ claude "* add dark mode"
+# Passes through as: "add dark mode"
+# No evaluation, no skill invocation
+```
+
+### 2. Slash Commands: `/` Prefix
+
+**Purpose**: Built-in or custom slash commands  
+**Behavior**: Pass through unchanged (slash commands have their own handling)
+
+```python
+if prompt.startswith("/"):
+    # Slash command - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+```
+
+**Example**:
+```bash
+$ claude "/help"
+# Passes through as: "/help"
+# Slash command system handles it
+```
+
+### 3. Memorize Feature: `#` Prefix
+
+**Purpose**: Add information to conversation memory  
+**Behavior**: Pass through unchanged (memorize has its own handling)
+
+```python
+if prompt.startswith("#"):
+    # Memorize feature - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+```
+
+**Example**:
+```bash
+$ claude "# remember to use rg over grep"
+# Passes through as: "# remember to use rg over grep"
+# Memorize system handles it
+```
+
+<Warning>
+Bypass logic must run before evaluation to prevent slash commands and memorize from being evaluated as prompts.
+</Warning>
+
+## Evaluation Logic
+
+For non-bypassed prompts, the hook wraps the original prompt with evaluation instructions:
+
+### Evaluation Wrapper (~189 tokens)
+
+```python
+# Escape quotes in prompt for safe embedding
+escaped_prompt = prompt.replace("\\", "\\\\").replace('"', '\\"')
+
+# Build the evaluation wrapper
+wrapped_prompt = f"""PROMPT EVALUATION
+
+Original user request: "{escaped_prompt}"
+
+EVALUATE: Is this prompt clear enough to execute, or does it need enrichment?
+
+PROCEED IMMEDIATELY if:
+- Detailed/specific OR you have sufficient context OR can infer intent
+
+ONLY USE SKILL if genuinely vague (e.g., "fix the bug" with no context):
+- If vague:
+  1. First, preface with brief note: "Hey! The Prompt Improver Hook flagged your prompt as a bit vague because [specific reason: ambiguous scope/missing context/unclear target/etc]."
+  2. Then use the prompt-improver skill to research and generate clarifying questions
+- The skill will guide you through research, question generation, and execution
+- Trust user intent by default. Check conversation history before using the skill.
+
+If clear, proceed with the original request. If vague, invoke the skill."""
+
+output_json(wrapped_prompt)
+sys.exit(0)
+```
+
+### Evaluation Criteria
+
+Claude evaluates the wrapped prompt using:
+
+1. **Conversation History**: Check if context exists from previous messages
+2. **Prompt Specificity**: Is the target/approach/scope clear?
+3. **Inferability**: Can intent be reasonably inferred?
+
+### Evaluation Outcomes
+
+<Tabs>
+  <Tab title="Clear Prompt">
+    **Decision**: Proceed immediately
+    
+    **Action**: Execute original request without skill invocation
+    
+    **Token Cost**: ~189 tokens (evaluation wrapper only)
+    
+    **Example**:
+    ```
+    Original: "Fix TypeError in src/components/Map.tsx line 127 where mapboxgl.Map constructor is missing container option"
+    
+    Evaluation: Clear (specific file, line, error, and issue)
+    → Proceeds immediately
+    ```
+  </Tab>
+  
+  <Tab title="Vague Prompt">
+    **Decision**: Use prompt-improver skill
+    
+    **Action**:
+    1. Show friendly preface: "Hey! The Prompt Improver Hook flagged your prompt as a bit vague because [reason]."
+    2. Invoke `prompt-improver` skill
+    3. Skill guides research and question generation
+    4. Ask clarifying questions (1-6)
+    5. Execute with answers
+    
+    **Token Cost**: ~189 tokens + skill load + references as needed
+    
+    **Example**:
+    ```
+    Original: "fix the error"
+    
+    Evaluation: Vague (which error? where? what kind?)
+    → Invokes skill
+    → Research finds recent errors
+    → Asks: "Which error needs fixing?"
+    ```
+  </Tab>
+</Tabs>
+
+## Skill Invocation Pattern
+
+When Claude determines a prompt is vague, it follows this pattern:
+
+```markdown
+Hey! The Prompt Improver Hook flagged your prompt as a bit vague because [reason].
+
+[Invokes prompt-improver skill]
+
+[Creates research plan via TodoWrite]
+
+[Executes research using Task/Grep/WebSearch/etc.]
+
+[Formulates grounded questions based on findings]
+
+[Uses AskUserQuestion tool with multiple choice options]
+```
+
+<Info>
+The casual "Hey!" preface makes the clarification process feel transparent and approachable rather than robotic.
+</Info>
+
+## Complete Hook Implementation
+
+View the full hook script at `scripts/improve-prompt.py:1-72`:
+
+```python scripts/improve-prompt.py
+#!/usr/bin/env python3
+"""
+Claude Code Prompt Improver Hook
+Evaluates prompts for clarity and invokes the prompt-improver skill for vague cases.
+"""
+import json
+import sys
+
+# Load input from stdin
+try:
+    input_data = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
+    sys.exit(1)
+
+prompt = input_data.get("prompt", "")
+
+# Escape quotes in prompt for safe embedding
+escaped_prompt = prompt.replace("\\", "\\\\").replace('"', '\\"')
+
+def output_json(text):
+    """Output text in UserPromptSubmit JSON format"""
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": text
+        }
+    }
+    print(json.dumps(output))
+
+# Check for bypass conditions
+# 1. Explicit bypass with * prefix
+# 2. Slash commands (built-in or custom)
+# 3. Memorize feature (# prefix)
+if prompt.startswith("*"):
+    # User explicitly bypassed improvement - remove * prefix
+    clean_prompt = prompt[1:].strip()
+    output_json(clean_prompt)
+    sys.exit(0)
+
+if prompt.startswith("/"):
+    # Slash command - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+
+if prompt.startswith("#"):
+    # Memorize feature - pass through unchanged
+    output_json(prompt)
+    sys.exit(0)
+
+# Build the evaluation wrapper
+wrapped_prompt = f"""PROMPT EVALUATION
+
+Original user request: "{escaped_prompt}"
+
+EVALUATE: Is this prompt clear enough to execute, or does it need enrichment?
+
+PROCEED IMMEDIATELY if:
+- Detailed/specific OR you have sufficient context OR can infer intent
+
+ONLY USE SKILL if genuinely vague (e.g., "fix the bug" with no context):
+- If vague:
+  1. First, preface with brief note: "Hey! The Prompt Improver Hook flagged your prompt as a bit vague because [specific reason: ambiguous scope/missing context/unclear target/etc]."
+  2. Then use the prompt-improver skill to research and generate clarifying questions
+- The skill will guide you through research, question generation, and execution
+- Trust user intent by default. Check conversation history before using the skill.
+
+If clear, proceed with the original request. If vague, invoke the skill."""
+
+output_json(wrapped_prompt)
+sys.exit(0)
+```
+
+## Key Design Decisions
+
+<CardGroup cols={2}>
+  <Card title="Minimal Code" icon="code">
+    Only ~70 lines to minimize execution time and maintenance burden
+  </Card>
+  
+  <Card title="No Heavy Imports" icon="feather">
+    Standard library only (json, sys) - no network calls or complex dependencies
+  </Card>
+  
+  <Card title="Fail-Safe Bypasses" icon="shield">
+    Bypass logic runs first to prevent breaking slash commands or memorize
+  </Card>
+  
+  <Card title="Quote Escaping" icon="quotes">
+    Properly escapes user input to prevent JSON/prompt injection
+  </Card>
+</CardGroup>
+
+## Testing
+
+The hook is tested via `tests/test_hook.py` using subprocess execution:
+
+```python
+import subprocess
+import json
+
+def test_bypass_prefix():
+    """Test that * prefix bypasses evaluation"""
+    input_data = {"prompt": "* add dark mode"}
+    result = subprocess.run(
+        ["python3", "scripts/improve-prompt.py"],
+        input=json.dumps(input_data),
+        capture_output=True,
+        text=True
+    )
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["additionalContext"] == "add dark mode"
+    assert result.returncode == 0
+```
+
+<Tip>
+See `tests/test_hook.py` for 8 comprehensive hook tests covering bypasses, evaluation wrapping, and JSON validation.
+</Tip>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Skill System" icon="book-open" href="/architecture/skill-system">
+    Learn what happens after the hook invokes the skill
+  </Card>
+  
+  <Card title="Progressive Disclosure" icon="layer-group" href="/architecture/progressive-disclosure">
+    See how this architecture achieves token efficiency
+  </Card>
+</CardGroup>

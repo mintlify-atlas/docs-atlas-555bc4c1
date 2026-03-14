@@ -1,0 +1,259 @@
+---
+title: Frequently Asked Questions
+description: Common questions about Claude Code Prompt Improver
+---
+
+<AccordionGroup>
+  <Accordion title="Does this work on all prompts?">
+    Yes, the hook intercepts every prompt submitted to Claude Code, unless you use bypass prefixes:
+
+    - `*` prefix: Skip evaluation entirely (example: `claude "* add dark mode"`)
+    - `/` prefix: Slash commands automatically bypass (example: `claude "/commit"`)
+    - `#` prefix: Memorize commands bypass (example: `claude "# use TypeScript"`)
+
+    For all other prompts, the hook evaluates clarity and proceeds accordingly.
+
+    <Note>
+      Clear prompts proceed immediately with minimal overhead (~189 tokens). Only vague prompts trigger the full skill.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Will it slow me down?">
+    **Short answer:** Only slightly when it asks questions, but faster overall.
+
+    **Clear prompts:**
+    - Evaluation happens in ~189 tokens
+    - Proceeds immediately (no skill load)
+    - Zero skill overhead
+
+    **Vague prompts:**
+    - Hook evaluates (~189 tokens)
+    - Skill loads for research and questions
+    - You spend a few seconds answering 1-6 questions
+    - But you get better results on the first try
+
+    **Net result:** Less back-and-forth debugging and clarification means faster overall completion.
+
+    Learn more in the [Architecture guide](/architecture/overview).
+  </Accordion>
+
+  <Accordion title="Will I get bombarded with questions?">
+    **No.** The system is designed to rarely intervene:
+
+    - Most prompts pass through unchanged (clear prompts proceed immediately)
+    - Only vague prompts trigger questions
+    - Maximum 1-6 questions (enough for complex scenarios, still focused)
+    - Questions are grounded in research, not generic guesses
+
+    **Design principles:**
+    - Rarely intervene
+    - Trust user intent
+    - Use conversation history to avoid redundant exploration
+    - Transparent evaluation (visible in conversation)
+
+    See [Design Philosophy](/introduction#design-philosophy) for more.
+  </Accordion>
+
+  <Accordion title="Can I customize behavior?">
+    Yes, the system adapts automatically in several ways:
+
+    **Automatic adaptation:**
+    - Uses conversation history to evaluate clarity
+    - Creates dynamic research plans based on what needs clarification
+    - Grounds questions in actual project context (not generic patterns)
+    - Respects CLAUDE.md conventions in your repository
+
+    **Manual customization:**
+    - Use bypass prefixes (`*`, `/`, `#`) to skip evaluation when needed
+    - Invoke skill manually: `"Use the prompt-improver skill to research: [your prompt]"`
+    - Fork and modify the skill workflow (SKILL.md is markdown-based)
+
+    **What you can't customize (by design):**
+    - Evaluation criteria (uses conversation history and context)
+    - Question patterns (grounded in research, not templates)
+
+    Learn more about [Usage patterns](/guides/usage-patterns).
+  </Accordion>
+
+  <Accordion title="What if I don't want improvement?">
+    Use the `*` prefix to skip evaluation entirely:
+
+    ```bash
+    claude "* your prompt here"
+    ```
+
+    The hook will strip the prefix and pass your prompt through unchanged. No evaluation, no skill invocation, no questions.
+
+    **Other bypass options:**
+    - Slash commands (like `/commit`, `/help`) automatically bypass
+    - Hash prefix (like `# remember to use rg over grep`) for memorization
+
+    See [Bypass mechanisms](/guides/bypass-prefixes) for details.
+  </Accordion>
+
+  <Accordion title="How does it handle conversation history?">
+    The hook provides conversation history to Claude during evaluation:
+
+    **Clear prompt determination:**
+    - If recent messages already provide context, prompt may be deemed clear
+    - Avoids asking redundant questions about information already discussed
+    - Enables contextual evaluation (not just heuristic pattern matching)
+
+    **Research phase (for vague prompts):**
+    - Skill instructs Claude to check conversation history first
+    - Then review codebase if needed
+    - Finally gather additional context (web, docs)
+    - Documents findings before generating questions
+
+    **Benefits:**
+    - More accurate clarity evaluation
+    - No redundant exploration
+    - Questions are grounded in what's actually missing
+
+    <Info>
+      This is why the system works in the main session instead of a subagent - it needs access to full conversation context.
+    </Info>
+  </Accordion>
+
+  <Accordion title="What's the token overhead?">
+    **v0.4.0+ (current architecture):**
+    - Per prompt: ~189 tokens (evaluation prompt only)
+    - 30-message session: ~5.7k tokens (~2.8% of 200k context)
+    - Clear prompts: Zero skill overhead
+    - Vague prompts: ~189 tokens + skill load
+
+    **v0.3.x (previous architecture):**
+    - Per prompt: ~275 tokens (embedded evaluation logic)
+    - 30-message session: ~8.3k tokens (~4.1% of 200k context)
+
+    **Improvement: 31% token reduction** through skill-based architecture with hook-level evaluation.
+
+    **Progressive disclosure:**
+    - Skill and reference files load only when needed
+    - Zero context penalty for unused reference materials
+    - Clear prompts never load skill instructions
+
+    See [Progressive Disclosure](/architecture/progressive-disclosure) for details.
+  </Accordion>
+
+  <Accordion title="Does it work with all prompts?">
+    Yes, with some nuances:
+
+    **Works well with:**
+    - Vague feature requests ("add authentication")
+    - Unclear bug reports ("fix the error")
+    - Ambiguous refactoring tasks ("improve the code")
+    - Missing context scenarios ("add tests")
+
+    **Passes through immediately:**
+    - Specific prompts with file paths and line numbers
+    - Detailed requirements with clear scope
+    - Prompts where conversation history provides context
+
+    **Automatically bypasses:**
+    - Slash commands (`/commit`, `/help`)
+    - Memorize commands (`# note`)
+    - Explicit bypass prefix (`*`)
+
+    **Edge cases:**
+    - Very short prompts ("fix it") trigger evaluation
+    - Empty prompts invoke skill
+    - Multiline prompts are supported
+    - Special characters are handled correctly
+
+    See the [test suite examples](/advanced/troubleshooting#step-5-run-test-suite) for more scenarios.
+  </Accordion>
+
+  <Accordion title="How do I disable it temporarily?">
+    **For a single prompt:**
+    ```bash
+    claude "* your prompt"
+    ```
+    The `*` prefix skips evaluation for that prompt only.
+
+    **For a session:**
+    There's no built-in "disable for session" feature, but you can:
+    - Use `*` prefix on each prompt
+    - Or uninstall temporarily:
+      ```bash
+      claude plugin uninstall prompt-improver
+      # Work without the plugin
+      claude plugin install prompt-improver@severity1-marketplace
+      ```
+
+    **Permanently:**
+    ```bash
+    claude plugin uninstall prompt-improver
+    ```
+
+    **For manual installation:**
+    Remove or comment out the `UserPromptSubmit` hook in `~/.claude/settings.json`.
+
+    <Tip>
+      If you find yourself frequently using the bypass prefix, consider whether your prompts are actually clear enough that the plugin isn't adding value.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Can I use this with other hooks?">
+    Yes, the prompt-improver hook is designed to work alongside other `UserPromptSubmit` hooks:
+
+    **Hook execution order:**
+    - Multiple hooks for the same event run in the order they're registered
+    - Each hook receives the output of the previous hook
+    - Prompt-improver transforms the prompt but doesn't block other hooks
+
+    **Compatibility:**
+    - Uses standard Claude Code hook specification
+    - JSON stdin/stdout format
+    - Exit code 0 for success
+    - No side effects beyond prompt transformation
+
+    **Considerations:**
+    - If another hook also modifies `additionalContext`, they may conflict
+    - Test the combined behavior with both hooks installed
+
+    Learn more about [hook configuration](/reference/hook/overview).
+  </Accordion>
+
+  <Accordion title="What happens if Claude Code updates?">
+    The plugin is designed to be resilient to Claude Code updates:
+
+    **Stable dependencies:**
+    - Uses official UserPromptSubmit hook specification
+    - Requires Claude Code 2.0.22+ (for AskUserQuestion tool)
+    - No private APIs or undocumented features
+
+    **If something breaks:**
+    - Check plugin version compatibility
+    - Review [Changelog](/advanced/changelog) for breaking changes
+    - Update to latest plugin version
+    - File an issue if incompatibility found
+
+    **Testing:**
+    - Run test suite after Claude Code updates:
+      ```bash
+      pytest tests/
+      ```
+    - Verify hook registration: `/plugin` command
+    - Test basic flow: `claude "fix the bug"`
+
+    <Warning>
+      Major Claude Code updates may introduce breaking changes. Check the changelog before updating.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Still have questions?
+
+Check these resources:
+
+- [Introduction](/introduction)
+- [Architecture Overview](/architecture/overview)
+- [Troubleshooting Guide](/advanced/troubleshooting)
+- [Changelog](/advanced/changelog)
+
+For issues not covered here, file an issue on the project repository with:
+- Your question
+- Claude Code version
+- Plugin version
+- Relevant output or error messages
